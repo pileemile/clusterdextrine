@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mongoflix — Relevés météo</title>
+    <meta name="description" content="Explorez, créez, modifiez et supprimez les relevés météo de sample_weatherdata." />
+    <meta name="theme-color" content="#030504" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2300ed64' d='M12 2c3.5 4.2 5.5 8.3 5.5 12.2 0 3.6-2.2 6.2-4.8 7.3V23h-1.4v-1.5C8.7 20.4 6.5 17.8 6.5 14.2 6.5 10.3 8.5 6.2 12 2z'/></svg>"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="intro" id="intro" aria-hidden="true">
+      <div class="intro__logo">
+        <span style="--i: 0">M</span><span style="--i: 1">O</span><span style="--i: 2">N</span><span style="--i: 3">G</span><span style="--i: 4">O</span><span style="--i: 5">F</span><span style="--i: 6">L</span><span style="--i: 7">I</span><span style="--i: 8">X</span>
+      </div>
+      <p class="intro__skip">Cliquez pour passer</p>
+    </div>
+
+    <a class="skip" href="#main">Aller au contenu</a>
+    <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+
+    <header class="nav" id="nav">
+      <a class="logo" href="#top" aria-label="Mongoflix, retour en haut">
+        <svg class="logo__leaf" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+          <path d="M12 2c3.5 4.2 5.5 8.3 5.5 12.2 0 3.6-2.2 6.2-4.8 7.3V23h-1.4v-1.5C8.7 20.4 6.5 17.8 6.5 14.2 6.5 10.3 8.5 6.2 12 2z" />
+        </svg>
+        <span>MONGOFLIX</span>
+      </a>
+
+      <nav class="nav__links" id="navLinks" aria-label="Sections">
+        <span class="nav__pill" aria-hidden="true"></span>
+        <a href="#top" data-section="top">Accueil</a>
+        <a href="#top10" data-section="top10">Top 10</a>
+        <a href="#rows" data-section="rows">Catégories</a>
+        <a href="#explore" data-section="explore">Explorer</a>
+      </nav>
+
+      <div class="nav__actions">
+        <label class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="searchInput" type="search" placeholder="Station ou indicatif…" autocomplete="off" spellcheck="false" aria-label="Rechercher une station ou un indicatif" />
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+        <button class="btn btn--primary btn--sm magnetic" type="button" data-new aria-keyshortcuts="n">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          <span data-roll>Nouveau</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-label="Relevé à la une">
+        <div class="hero__bg" aria-hidden="true">
+          <div class="aurora aurora--1"></div>
+          <div class="aurora aurora--2"></div>
+          <div class="aurora aurora--3"></div>
+        </div>
+        <div class="hero__globe" id="heroGlobeWrap">
+          <canvas id="heroGlobe" role="img" aria-label="Globe des stations météo, glissez pour le faire tourner"></canvas>
+          <p class="hero__hint" aria-hidden="true">Glissez pour faire tourner le globe</p>
+        </div>
+        <div class="hero__vignette" aria-hidden="true"></div>
+        <div class="hero__content" id="hero" aria-live="polite">
+          <div class="sk sk--eyebrow"></div>
+          <div class="sk sk--title"></div>
+          <div class="sk sk--line"></div>
+          <div class="sk sk--line sk--short"></div>
+        </div>
+      </section>
+
+      <section class="section reveal-group" id="top10" aria-labelledby="top10Title">
+        <div class="section__head reveal">
+          <h2 class="section__title" id="top10Title">
+            <span class="top10__badge" aria-hidden="true">TOP<b>10</b></span>
+            Les relevés les plus chauds
+          </h2>
+          <button class="link-more" type="button" data-explore-sort="-temp">
+            Tout voir
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+        <div class="row">
+          <button class="row__arrow row__arrow--prev" type="button" data-dir="-1" aria-label="Défiler vers la gauche">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div class="track track--top10" id="top10Track" data-track data-reloadable></div>
+          <button class="row__arrow row__arrow--next" type="button" data-dir="1" aria-label="Défiler vers la droite">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+      </section>
+
+      <div id="rows"></div>
+
+      <section class="section explore reveal-group" id="explore" aria-labelledby="exploreTitle">
+        <div class="section__head section__head--explore reveal">
+          <div>
+            <h2 class="section__title" id="exploreTitle">Explorer <span class="count" id="exploreCount"></span></h2>
+            <p class="section__sub" id="exploreSub">Chargement de la collection…</p>
+          </div>
+          <div class="seg" id="sortSeg" role="group" aria-label="Trier les relevés">
+            <span class="seg__pill" aria-hidden="true"></span>
+          </div>
+        </div>
+        <div class="grid" id="grid" data-reloadable></div>
+        <nav class="pager" id="pager" aria-label="Pagination"></nav>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p class="footer__logo">MONGOFLIX</p>
+      <p>Données : collection officielle MongoDB <code>sample_weatherdata.data</code>.</p>
+      <p class="footer__links">
+        <a href="/api-docs">Documentation API (Swagger)</a>
+        <span aria-hidden="true">·</span>
+        <span>Raccourcis : <kbd>/</kbd> rechercher, <kbd>N</kbd> nouveau relevé, <kbd>Échap</kbd> fermer</span>
+      </p>
+    </footer>
+
+    <div class="modal" id="modal" hidden>
+      <div class="modal__backdrop" data-close></div>
+      <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+        <button class="modal__close" type="button" data-close aria-label="Fermer">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+        <div class="modal__content" id="modalContent"></div>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

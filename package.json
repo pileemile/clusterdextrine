@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js"
+    "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js",
+    "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js"
   },
   "keywords": [],
   "author": "",

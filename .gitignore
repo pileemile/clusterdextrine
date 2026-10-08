@@ -1,3 +1,6 @@
 node_modules/
 .env
 .DS_Store
+rapport.html
+k6-report.html
+k6-report.json

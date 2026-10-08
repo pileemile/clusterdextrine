@@ -20,6 +20,7 @@ app.get("/api", (_req, res) => {
     endpoints: {
       list: "GET /api/weather?page=1&limit=20&st=&q=&sort=-temp",
       one: "GET /api/weather/:id",
+      events: "GET /api/weather/events (SSE)",
       create: "POST /api/weather",
       update: "PUT /api/weather/:id",
       delete: "DELETE /api/weather/:id",

@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const Weather = require("../models/Weather");
+const { subscribe, changed } = require("../sse/weatherEvents");
 
 const router = express.Router();
 
@@ -72,6 +73,11 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Flux SSE — avant /:id pour ne pas être capturé comme un ObjectId
+router.get("/events", (req, res) => {
+  subscribe(req, res);
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseObjectId(req.params.id);
@@ -92,6 +98,7 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const created = await Weather.create(req.body);
+    changed({ id: created._id, action: "created" });
     res.status(201).json(created);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -114,6 +121,7 @@ router.put("/:id", async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Rapport météo introuvable" });
     }
+    changed({ id: updated._id, action: "updated" });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -131,6 +139,7 @@ router.delete("/:id", async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: "Rapport météo introuvable" });
     }
+    changed({ id: req.params.id, action: "deleted" });
     res.json({ message: "Supprimé", id: req.params.id });
   } catch (err) {
     res.status(500).json({ error: err.message });

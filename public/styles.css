@@ -180,6 +180,48 @@ svg {
   gap: 8px;
 }
 
+.sse {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 8px;
+  padding: 0 10px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sse__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.sse[data-state="connected"] {
+  color: var(--sky-deep);
+  border-color: #b7d9ea;
+  background: #eef7fb;
+}
+
+.sse[data-state="connected"] .sse__dot {
+  background: var(--sky);
+}
+
+.sse[data-state="interrupted"] {
+  color: #8a3b2a;
+  border-color: #efc9bf;
+  background: #fff4f1;
+}
+
+.sse[data-state="interrupted"] .sse__dot {
+  background: #c45a3e;
+}
+
 .search {
   display: flex;
   align-items: center;

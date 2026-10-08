@@ -188,7 +188,7 @@ const state = {
 let listReq = 0;
 let featureToken = 0;
 
-const modal = { mode: null, dirty: false, opener: null, timer: 0, closeArmed: 0 };
+const modal = { mode: null, docId: null, dirty: false, opener: null, timer: 0, closeArmed: 0 };
 
 function remember(docs) {
   docs.forEach((d) => cache.set(String(d._id), d));
@@ -489,6 +489,7 @@ function closeModal() {
   const finish = () => {
     root.hidden = true;
     modal.mode = null;
+    modal.docId = null;
     modal.dirty = false;
     $("#modalContent").innerHTML = "";
     lockScroll(false);
@@ -575,6 +576,7 @@ function renderDetail(doc) {
 
   return (root) => {
     modal.mode = "detail";
+    modal.docId = s.id;
     root.innerHTML = `
       <article class="detail">
         <p class="detail__kicker">${esc(TYPE_LABELS[s.type] || "Relevé météo")}</p>
@@ -741,6 +743,7 @@ function renderForm(doc = null) {
 
   return (root) => {
     modal.mode = "form";
+    modal.docId = s?.id ?? null;
     root.innerHTML = `
       <form class="form" novalidate>
         <h2 class="form__title" id="modalTitle">${isEdit ? esc(s.callLabel) : "Nouveau relevé"}</h2>
@@ -1094,6 +1097,120 @@ const spy = new IntersectionObserver(
 );
 ["une", "releves"].forEach((id) => spy.observe(document.getElementById(id)));
 
+/* Live SSE — synchro multi-onglets */
+
+const POLL_MS = 30_000;
+let stream = null;
+let pollTimer = null;
+let stopped = false;
+let sseReloadRunning = false;
+let sseReloadDirty = false;
+
+function setSseStatus(state, label) {
+  const el = $("#sseStatus");
+  if (!el) return;
+  el.dataset.state = state;
+  $(".sse__label", el).textContent = label;
+}
+
+async function refreshOpenDetail(change) {
+  if (stopped || $("#modal").hidden || modal.mode !== "detail" || !modal.docId) return;
+  const openId = modal.docId;
+
+  if (change?.action === "deleted" && String(change.id) === openId) {
+    closeModal();
+    toast({ msg: "Ce relevé a été supprimé sur un autre écran.", type: "error" });
+    return;
+  }
+
+  if (change?.id && String(change.id) !== openId) return;
+
+  try {
+    const doc = await api.get(openId);
+    cache.set(openId, doc);
+    if (!stopped && !$("#modal").hidden && modal.mode === "detail" && modal.docId === openId) {
+      openModal(renderDetail(doc));
+    }
+  } catch {
+    if (!$("#modal").hidden && modal.docId === openId) {
+      closeModal();
+      toast({ msg: "Ce relevé n’est plus disponible.", type: "error" });
+    }
+  }
+}
+
+async function reloadFromLive(change) {
+  if (stopped) return;
+  sseReloadDirty = true;
+  if (sseReloadRunning) return;
+  sseReloadRunning = true;
+  try {
+    while (sseReloadDirty && !stopped) {
+      sseReloadDirty = false;
+      await Promise.all([loadList(), loadFeatured(), refreshOpenDetail(change)]);
+    }
+  } catch {
+    /* loadList / loadFeatured gèrent déjà l’erreur à l’écran */
+  } finally {
+    sseReloadRunning = false;
+  }
+}
+
+function openLiveStream() {
+  if (stopped || typeof EventSource === "undefined") return;
+  if (stream) {
+    stream.close();
+    stream = null;
+  }
+
+  setSseStatus("connecting", "Connexion…");
+  stream = new EventSource("/api/weather/events");
+
+  stream.addEventListener("ready", () => {
+    if (stopped) return;
+    setSseStatus("connected", "En direct");
+    reloadFromLive();
+  });
+
+  stream.addEventListener("weather-updated", (e) => {
+    if (stopped) return;
+    let change = null;
+    try {
+      change = JSON.parse(e.data);
+    } catch {
+      /* ignore */
+    }
+    reloadFromLive(change);
+  });
+
+  // Ne pas appeler close() ici : EventSource se reconnecte tout seul
+  stream.onerror = () => {
+    if (stopped) return;
+    setSseStatus("interrupted", "Connexion interrompue");
+  };
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (!stopped) reloadFromLive();
+  }, POLL_MS);
+}
+
+function stopLive() {
+  stopped = true;
+  if (stream) {
+    stream.close();
+    stream = null;
+  }
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+addEventListener("pagehide", stopLive);
+
 $("#grid").innerHTML = skeletons();
 loadFeatured();
 loadList();
+openLiveStream();
+startPolling();

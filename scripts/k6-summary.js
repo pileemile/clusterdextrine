@@ -233,4 +233,11 @@ if (out) {
   console.log(md);
 }
 
-if (failed.length) process.exit(1);
+if (failed.length) {
+  const title = `Test de charge en échec : ${failed
+    .map((row) => `${row.target} (${row.kind})`)
+    .join(", ")}`.slice(0, 240);
+  fs.writeFileSync("k6-failure-title.txt", `${title}\n`);
+  fs.writeFileSync("k6-failure.md", md);
+  process.exit(1);
+}

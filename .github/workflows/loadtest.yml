@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   k6:
     runs-on: ubuntu-latest
@@ -73,6 +77,34 @@ jobs:
       - name: Publish summary
         if: always()
         run: node scripts/k6-summary.js summary.json
+
+      - name: Open GitHub issue
+        if: failure() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "k6" --color B60205 --description "Échec du test de charge" || true
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ -f k6-failure.md ]; then
+            title=$(head -n 1 k6-failure-title.txt)
+            {
+              echo "Run : $run_url"
+              echo
+              echo "Commit : \`${{ github.sha }}\`"
+              echo
+              cat k6-failure.md
+            } > /tmp/k6-issue.md
+          else
+            title="Test de charge en échec avant le résumé k6"
+            {
+              echo "Le job a échoué avant d'avoir un résumé de seuils."
+              echo
+              echo "Run : $run_url"
+              echo
+              echo "Commit : \`${{ github.sha }}\`"
+            } > /tmp/k6-issue.md
+          fi
+          gh issue create --title "$title" --body-file /tmp/k6-issue.md --label k6
 
       - name: Upload k6 report
         if: always()

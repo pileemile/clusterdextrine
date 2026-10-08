@@ -31,7 +31,6 @@ jobs:
       MONGODB_URI: mongodb://127.0.0.1:27017/sample_weatherdata
       PORT: 3000
       BASE_URL: http://127.0.0.1:3000
-      VUS: "20"
       DURATION: "20s"
 
     steps:

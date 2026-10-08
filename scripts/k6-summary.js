@@ -98,14 +98,27 @@ function limitText(name, meta, expr) {
   return `${stat} ${parsed.op} ${limit}`;
 }
 
+function tagsOf(name) {
+  const inside = (name.match(/\{([^}]+)\}/) || [])[1] || "";
+  const tags = {};
+  for (const part of inside.split(",")) {
+    const idx = part.indexOf(":");
+    if (idx === -1) continue;
+    tags[part.slice(0, idx)] = part.slice(idx + 1);
+  }
+  return tags;
+}
+
 function describe(name) {
   const base = name.split("{")[0];
-  const tag = (name.match(/\{([^}]+)\}/) || [])[1] || "";
-  const target = tag.startsWith("name:")
-    ? tag.slice(5)
-    : tag.startsWith("check:")
-      ? tag.slice(6)
-      : "global";
+  const tags = tagsOf(name);
+  const route = tags.name || tags.check || "";
+  const palier = tags.palier ? Number(tags.palier) : null;
+  const target = palier
+    ? route
+      ? `${palier} VUs · ${route}`
+      : `${palier} VUs`
+    : route || "global";
   const kind =
     base === "http_req_failed"
       ? "erreurs HTTP"
@@ -114,7 +127,7 @@ function describe(name) {
         : base === "checks"
           ? "checks"
           : base;
-  return { target, kind };
+  return { target, kind, palier };
 }
 
 const rows = [];
@@ -122,7 +135,7 @@ for (const [name, meta] of Object.entries(m)) {
   if (!meta?.thresholds) continue;
   for (const [expr, result] of Object.entries(meta.thresholds)) {
     const ok = thresholdOk(result);
-    const { target, kind } = describe(name);
+    const { target, kind, palier } = describe(name);
     const measure = measured(name, meta, expr);
     rows.push({
       ok,
@@ -130,6 +143,7 @@ for (const [name, meta] of Object.entries(m)) {
       expr,
       target,
       kind,
+      palier,
       limit: limitText(name, meta, expr),
       measure: measure.text,
     });
@@ -138,8 +152,9 @@ for (const [name, meta] of Object.entries(m)) {
 
 rows.sort((a, b) => {
   if (a.ok !== b.ok) return a.ok ? 1 : -1;
-  const rank = (row) => (row.target === "global" ? 0 : 1);
-  if (rank(a) !== rank(b)) return rank(a) - rank(b);
+  const pa = a.palier ?? -1;
+  const pb = b.palier ?? -1;
+  if (pa !== pb) return pa - pb;
   return `${a.target} ${a.kind}`.localeCompare(`${b.target} ${b.kind}`);
 });
 
@@ -170,6 +185,37 @@ const checkLines = collectChecks(data.root_group).map((c) => {
   return `| ${fails === 0 ? "✅" : "❌"} | ${c.name} | ${passes}/${total} |`;
 });
 
+const PALIERS = [10, 20, 30, 100, 200];
+
+function hasPalier(name, vus) {
+  return new RegExp(`(?:^|[{,])palier:${vus}(?:[,}])`).test(name);
+}
+
+function rateOf(meta) {
+  const body = metricBody(meta);
+  if (typeof body.rate === "number") return body.rate;
+  if (typeof body.value === "number") return body.value;
+  return undefined;
+}
+
+const palierStatuses = PALIERS.map((vus) => {
+  const related = rows.filter((row) => hasPalier(row.name, vus));
+  if (!related.length) return null;
+  return {
+    vus,
+    ok: related.every((row) => row.ok),
+    errors: rateOf(m[`http_req_failed{palier:${vus}}`]),
+    checks: rateOf(m[`checks{palier:${vus}}`]),
+  };
+}).filter(Boolean);
+
+const palierRows = palierStatuses
+  .map(
+    (row) =>
+      `| ${row.vus} | ${row.ok ? "✅" : "❌"} | ${fmtPct(row.errors)} | ${fmtPct(row.checks)} |`
+  )
+  .join("\n");
+
 const duration = metricBody(m.http_req_duration);
 const failedRate = metricBody(m.http_req_failed);
 const checks = metricBody(m.checks);
@@ -183,6 +229,19 @@ const checksRate = checks.rate ?? checks.value;
 const md = `## Test de charge k6
 
 ${verdict}
+
+${
+  palierRows
+    ? `### Paliers de VUs
+
+CRUD seulement. ✅ si ce nombre de VUs tient les seuils.
+
+| VUs | Résultat | Erreurs HTTP | Checks |
+| --- | --- | --- | --- |
+${palierRows}
+`
+    : ""
+}
 
 ### Seuils non tenus
 
@@ -204,7 +263,7 @@ ${checkLines.length ? checkLines.join("\n") : "| — | aucun | — |"}
 
 | Métrique | Valeur |
 | --- | --- |
-| VUs | ${fmtNum(vus.max ?? vus.value ?? Number(process.env.VUS))} |
+| VUs | ${palierStatuses.length ? palierStatuses.map((row) => row.vus).join(", ") : fmtNum(vus.max ?? vus.value ?? Number(process.env.VUS))} |
 | Durée | ${process.env.DURATION || "—"} |
 | Requêtes HTTP | ${fmtNum(httpReqs.count)} (${fmtNum(httpReqs.rate)}/s) |
 | Itérations | ${fmtNum(iterations.count)} |
@@ -234,9 +293,12 @@ if (out) {
 }
 
 if (failed.length) {
-  const title = `Test de charge en échec : ${failed
-    .map((row) => `${row.target} (${row.kind})`)
-    .join(", ")}`.slice(0, 240);
+  const broken = palierStatuses.filter((row) => !row.ok).map((row) => `${row.vus} VUs`);
+  const title = (
+    broken.length
+      ? `Test de charge en échec : ${broken.join(", ")}`
+      : `Test de charge en échec : ${failed.map((row) => `${row.target} (${row.kind})`).join(", ")}`
+  ).slice(0, 240);
   fs.writeFileSync("k6-failure-title.txt", `${title}\n`);
   fs.writeFileSync("k6-failure.md", md);
   process.exit(1);

@@ -35,7 +35,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -69,14 +69,18 @@ jobs:
         env:
           VUS: "20"
           DURATION: "20s"
-          K6_WEB_DASHBOARD: "true"
-          K6_WEB_DASHBOARD_EXPORT: "rapport.html"
-        run: k6 run loadtest.js
+        run: k6 run --summary-export=summary.json loadtest.js
+
+      - name: Publish summary
+        if: always()
+        run: node scripts/k6-summary.js summary.json
 
       - name: Upload k6 report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: k6-rapport
-          path: rapport.html
+          path: |
+            summary.json
+            rapport.html
           if-no-files-found: warn

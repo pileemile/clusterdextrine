@@ -1,13 +1,10 @@
-/* =========================================================
-   MONGOFLIX — front de l'API sample_weatherdata
-   ========================================================= */
+/* Ciel. Relevés météo. */
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const finePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
+
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const debounce = (fn, ms) => {
@@ -17,108 +14,83 @@ const debounce = (fn, ms) => {
     t = setTimeout(() => fn(...args), ms);
   };
 };
-const smooth = () => (reduceMotion ? "auto" : "smooth");
 
-/* ---------- Icônes ---------- */
-
-const svg = (d, fill = false) =>
-  `<svg viewBox="0 0 24 24" aria-hidden="true" ${
-    fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
-  }>${d}</svg>`;
-
-const icon = {
-  leaf: svg('<path d="M12 2c3.5 4.2 5.5 8.3 5.5 12.2 0 3.6-2.2 6.2-4.8 7.3V23h-1.4v-1.5C8.7 20.4 6.5 17.8 6.5 14.2 6.5 10.3 8.5 6.2 12 2z"/>', true),
-  play: svg('<path d="M7 4.5v15l12.5-7.5z"/>', true),
-  edit: svg('<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 7.5l3 3"/>'),
-  trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
-  shuffle: svg('<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>'),
-  wind: svg('<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/>'),
-  gauge: svg('<path d="M12 14l4-5"/><path d="M3.5 18a9.5 9.5 0 1 1 17 0"/>'),
-  thermo: svg('<path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0z"/>'),
-  drop: svg('<path d="M12 3s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11z"/>'),
-  humidity: svg('<path d="M12 3s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11z"/><path d="M9.5 16l5-5M9.5 11h.01M14.5 16h.01"/>'),
-  eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
-  cloud: svg('<path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/>'),
-  mountain: svg('<path d="M3 20 9.5 8l4 7 2.5-4 5 9z"/>'),
-  chevronL: svg('<path d="M15 5l-7 7 7 7"/>'),
-  chevronR: svg('<path d="M9 5l7 7-7 7"/>'),
-  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
-  alert: svg('<circle cx="12" cy="12" r="9.5"/><path d="M12 8v5M12 16.5h.01"/>'),
-  copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
-  close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
-  plus: svg('<path d="M12 5v14M5 12h14"/>'),
-  code: svg('<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>'),
-  refresh: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
-};
-
-/* ---------- Texte animé ---------- */
-
-const charSpans = (text) =>
-  [...String(text)].map((c, i) => `<span style="--i:${i}">${c === " " ? "&nbsp;" : esc(c)}</span>`).join("");
-
-const roll = (text) =>
-  `<span class="roll"><span class="sr-only">${esc(text)}</span><span class="roll__a" aria-hidden="true">${charSpans(
-    text
-  )}</span><span class="roll__b" aria-hidden="true">${charSpans(text)}</span></span>`;
-
-const splitTitle = (text) =>
-  `<span class="sr-only">${esc(text)}</span>` +
-  [...String(text)]
-    .map((c, i) => `<span class="ch" aria-hidden="true"><span style="--i:${i}">${c === " " ? "&nbsp;" : esc(c)}</span></span>`)
-    .join("");
-
-const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@$";
-
-function scramble(el) {
-  if (!el || reduceMotion || el.dataset.scrambling) return;
-  const final = (el.dataset.text ??= el.textContent);
-  el.dataset.scrambling = "1";
-  const total = 22;
-  let frame = 0;
-  const tick = () => {
-    frame++;
-    const progress = frame / total;
-    el.textContent = [...final]
-      .map((ch, i) => (ch === " " || progress > i / final.length ? ch : GLYPHS[(Math.random() * GLYPHS.length) | 0]))
-      .join("");
-    if (frame < total) requestAnimationFrame(tick);
-    else {
-      el.textContent = final;
-      delete el.dataset.scrambling;
-    }
-  };
-  requestAnimationFrame(tick);
+function svg(inner) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 }
 
-/* ---------- Formatage ---------- */
+const icon = {
+  cloudSun: svg(
+    '<path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>'
+  ),
+  sun: svg(
+    '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>'
+  ),
+  cloud: svg('<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>'),
+  snow: svg(
+    '<path d="M2 12h20"/><path d="M12 2v20"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>'
+  ),
+  search: svg('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+  plus: svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),
+  x: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  thermo: svg('<path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>'),
+  gauge: svg('<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>'),
+  wind: svg('<path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>'),
+  drop: svg('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>'),
+  eye: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
+  mountain: svg('<path d="m8 3 4 8 5-5 5 15H2L8 3z"/>'),
+  pencil: svg('<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>'),
+  trash: svg('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  chevronL: svg('<path d="m15 18-6-6 6-6"/>'),
+  chevronR: svg('<path d="m9 18 6-6-6-6"/>'),
+  check: svg('<path d="M20 6 9 17l-5-5"/>'),
+  alert: svg('<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>'),
+  copy: svg('<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'),
+  calendar: svg('<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>'),
+  pin: svg('<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>'),
+  refresh: svg('<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>'),
+  code: svg('<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>'),
+};
 
-const minus = (s) => s.replace("-", "−");
 const nfCache = new Map();
 const nf = (digits) => {
   if (!nfCache.has(digits)) {
-    nfCache.set(digits, new Intl.NumberFormat("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+    nfCache.set(
+      digits,
+      new Intl.NumberFormat("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    );
   }
   return nfCache.get(digits);
 };
-const fmtNum = (v, digits = 1) => (v == null ? "—" : minus(nf(digits).format(v)));
+const fmtNum = (v, digits = 1) => nf(digits).format(v);
 const fmtInt = (v) => new Intl.NumberFormat("fr-FR").format(v);
-const fmtTemp = (v) => (v == null ? "—" : `${fmtNum(v, 1)}°`);
+const fmtTemp = (v) => `${fmtNum(v, 1)}°`;
 const dfLong = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" });
 const dfShort = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
-const fmtDate = (d, short = false) =>
-  !isValidDate(d) ? "Date inconnue" : short ? dfShort.format(d) : `${dfLong.format(d)} UTC`;
-const fmtCoords = (lat, lng) =>
-  lat == null || lng == null
-    ? "Position inconnue"
-    : `${nf(1).format(Math.abs(lat))}°${lat >= 0 ? "N" : "S"} ${nf(1).format(Math.abs(lng))}°${lng >= 0 ? "E" : "O"}`;
+const fmtDate = (d, short = false) => {
+  if (!isValidDate(d)) return "Date inconnue";
+  return short ? dfShort.format(d) : `${dfLong.format(d)} UTC`;
+};
+const fmtCoords = (lat, lng) => {
+  if (lat == null || lng == null) return "Position inconnue";
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lng >= 0 ? "E" : "O";
+  return `${nf(1).format(Math.abs(lat))}° ${ns}  ${nf(1).format(Math.abs(lng))}° ${ew}`;
+};
+
 const CARDINALS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
-const cardinal = (a) => CARDINALS[Math.round(a / 22.5) % 16];
+const cardinal = (a) => CARDINALS[Math.round((((a % 360) + 360) % 360) / 22.5) % 16];
 
-/* ---------- Données ---------- */
-
-// Sentinelles du dataset officiel : valeur >= seuil = non mesuré.
-const MISSING = { temp: 999.9, pressure: 9999.9, rate: 999.9, angle: 999, elevation: 9999, visibility: 999999, ceiling: 99999 };
+const MISSING = {
+  temp: 999.9,
+  pressure: 9999.9,
+  rate: 999.9,
+  angle: 999,
+  elevation: 9999,
+  visibility: 999999,
+  ceiling: 99999,
+};
 const measured = (v, missing) => (typeof v === "number" && Number.isFinite(v) && v < missing ? v : null);
 
 const TYPE_LABELS = {
@@ -128,16 +100,18 @@ const TYPE_LABELS = {
   "FM-15": "METAR aéroport",
   "FM-16": "SPECI aéroport",
   SAO: "Station SAO",
-  "SY-MT": "SYNOP + METAR",
+  "SY-MT": "SYNOP et METAR",
 };
 
 function summarize(d) {
   const coords = Array.isArray(d.position?.coordinates) ? d.position.coordinates : [];
   const [lng, lat] = coords;
+  const call = d.callLetters || "";
   return {
     id: String(d._id),
     st: d.st ?? "",
-    call: d.callLetters || "—",
+    call,
+    callLabel: call || "Sans indicatif",
     type: d.type || "",
     ts: d.ts ? new Date(d.ts) : null,
     lat: typeof lat === "number" ? lat : null,
@@ -153,20 +127,21 @@ function summarize(d) {
   };
 }
 
-const heatOf = (t) => (t == null ? 0.12 : clamp((t + 25) / 65, 0, 1));
+function mood(t) {
+  if (t == null) return "Température non mesurée";
+  if (t >= 30) return "Chaud";
+  if (t >= 20) return "Doux";
+  if (t >= 10) return "Tempéré";
+  if (t >= 0) return "Frais";
+  return "Gel";
+}
 
-function heatColor(h) {
-  const stops = [
-    [0, [150, 178, 163]],
-    [0.55, [0, 237, 100]],
-    [1, [210, 255, 60]],
-  ];
-  const i = h <= stops[1][0] ? 0 : 1;
-  const [a, ca] = stops[i];
-  const [b, cb] = stops[i + 1];
-  const t = (h - a) / (b - a);
-  const c = ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
-  return `rgb(${c[0]} ${c[1]} ${c[2]})`;
+function moodIcon(t) {
+  if (t == null) return icon.thermo;
+  if (t >= 20) return icon.sun;
+  if (t >= 8) return icon.cloudSun;
+  if (t >= 0) return icon.cloud;
+  return icon.snow;
 }
 
 function relativeHumidity(t, dew) {
@@ -174,26 +149,6 @@ function relativeHumidity(t, dew) {
   const f = (x) => Math.exp((17.625 * x) / (243.04 + x));
   return clamp((100 * f(dew)) / f(t), 0, 100);
 }
-
-function describe(s) {
-  const when = isValidDate(s.ts) ? ` le ${fmtDate(s.ts)}` : "";
-  const where = s.lat != null ? `, à ${fmtCoords(s.lat, s.lng)}` : "";
-  const mood =
-    s.temp == null
-      ? "Température non mesurée."
-      : s.temp >= 30
-        ? "Chaleur écrasante."
-        : s.temp >= 20
-          ? "Douceur estivale."
-          : s.temp >= 8
-            ? "Air tempéré."
-            : s.temp >= 0
-              ? "Fraîcheur marquée."
-              : "Le gel s'installe.";
-  return `${TYPE_LABELS[s.type] ?? "Relevé"} capturé${when}${where}. ${mood}`;
-}
-
-/* ---------- API ---------- */
 
 async function request(url, { method = "GET", body, keepalive } = {}) {
   const res = await fetch(url, {
@@ -218,697 +173,335 @@ const api = {
   remove: (id, opts) => request(`/api/weather/${encodeURIComponent(id)}`, { method: "DELETE", ...opts }),
 };
 
-/* ---------- État ---------- */
-
 const cache = new Map();
-const pendingDeletes = new Map();
-let heroGlobe = null;
-let featuredId = null;
+const pending = new Set();
+const state = {
+  page: 1,
+  limit: 12,
+  sort: "-ts",
+  q: "",
+  total: 0,
+  pages: 1,
+  featuredId: null,
+  docs: [],
+};
+let listReq = 0;
+let featureToken = 0;
+
+const modal = { mode: null, dirty: false, opener: null, timer: 0, closeArmed: 0 };
 
 function remember(docs) {
   docs.forEach((d) => cache.set(String(d._id), d));
-  heroGlobe?.setMarkers(
-    [...cache.values()]
-      .filter((d) => !pendingDeletes.has(String(d._id)))
-      .map(summarize)
-      .filter((s) => s.lat != null)
-  );
 }
 
-/* =========================================================
-   Globe 3D (canvas, projection orthographique)
-   ========================================================= */
-
-const TAU = Math.PI * 2;
-const DEG = Math.PI / 180;
-const globes = new Set();
-
-function fibonacciSphere(n) {
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    const y = 1 - (i / (n - 1)) * 2;
-    const r = Math.sqrt(1 - y * y);
-    const th = golden * i;
-    pts.push([Math.asin(y), Math.atan2(Math.sin(th) * r, Math.cos(th) * r)]);
-  }
-  return pts;
+function visibleDocs() {
+  return state.docs.filter((d) => !pending.has(String(d._id)));
 }
 
-class Globe {
-  constructor(canvas, opts = {}) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.opts = { dots: 1600, speed: 0.0012, radius: 0.44, hold: 4500, interactive: false, ...opts };
-    this.rot = opts.rot ?? 0.6;
-    this.tilt = -0.42;
-    this.vel = 0;
-    this.targetRot = null;
-    this.targetTilt = null;
-    this.holdUntil = 0;
-    this.markers = [];
-    this.focus = null;
-    this.visible = true;
-    this.raf = null;
-    this.w = 0;
-    this.h = 0;
-    this.points = fibonacciSphere(this.opts.dots);
-    this.frame = this.frame.bind(this);
-    this.ro = new ResizeObserver(() => this.resize());
-    this.ro.observe(canvas);
-    this.io = new IntersectionObserver(([entry]) => {
-      this.visible = entry.isIntersecting;
-      this.start();
-    });
-    this.io.observe(canvas);
-    if (this.opts.interactive) this.bindDrag();
-    globes.add(this);
-  }
+/* Rendu */
 
-  resize() {
-    const r = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    this.w = r.width;
-    this.h = r.height;
-    this.canvas.width = Math.round(r.width * dpr);
-    this.canvas.height = Math.round(r.height * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.start();
-  }
-
-  setMarkers(list) {
-    this.markers = list.slice(0, 500).map((s) => [s.lat * DEG, s.lng * DEG]);
-    if (reduceMotion) this.start();
-  }
-
-  setFocus(lat, lng, { spin = true } = {}) {
-    this.focus = [lat * DEG, lng * DEG];
-    if (spin) this.spinTo(lat, lng);
-    this.start();
-  }
-
-  spinTo(lat, lng) {
-    const target = -lng * DEG;
-    const diff = ((((target - this.rot + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
-    this.targetRot = this.rot + diff;
-    this.targetTilt = clamp(-lat * DEG, -1.2, 1.2);
-    this.vel = 0;
-    this.start();
-  }
-
-  bindDrag() {
-    const c = this.canvas;
-    let lx = 0;
-    let ly = 0;
-    c.addEventListener("pointerdown", (e) => {
-      this.dragging = true;
-      this.targetRot = null;
-      lx = e.clientX;
-      ly = e.clientY;
-      c.setPointerCapture(e.pointerId);
-      c.classList.add("is-dragging");
-      $(".hero__hint")?.classList.add("is-hidden");
-    });
-    c.addEventListener("pointermove", (e) => {
-      if (!this.dragging) return;
-      const dx = e.clientX - lx;
-      const dy = e.clientY - ly;
-      lx = e.clientX;
-      ly = e.clientY;
-      this.rot += dx * 0.006;
-      this.tilt = clamp(this.tilt - dy * 0.004, -1.3, 1.3);
-      this.vel = dx * 0.0007;
-      this.start();
-    });
-    const end = () => {
-      this.dragging = false;
-      this.holdUntil = performance.now() + 1200;
-      c.classList.remove("is-dragging");
-    };
-    c.addEventListener("pointerup", end);
-    c.addEventListener("pointercancel", end);
-  }
-
-  start() {
-    if (!this.raf && this.visible) this.raf = requestAnimationFrame(this.frame);
-  }
-
-  destroy() {
-    cancelAnimationFrame(this.raf);
-    this.ro.disconnect();
-    this.io.disconnect();
-    globes.delete(this);
-  }
-
-  frame(now) {
-    this.raf = null;
-    if (!this.visible || document.hidden || !this.w) return;
-
-    if (this.targetRot != null) {
-      const k = reduceMotion ? 1 : 0.06;
-      this.rot += (this.targetRot - this.rot) * k;
-      this.tilt += (this.targetTilt - this.tilt) * k;
-      if (Math.abs(this.targetRot - this.rot) < 1e-3 && Math.abs(this.targetTilt - this.tilt) < 1e-3) {
-        this.targetRot = null;
-        this.holdUntil = now + this.opts.hold;
-      }
-    } else if (!this.dragging) {
-      this.rot += this.vel;
-      this.vel *= 0.94;
-      if (now > this.holdUntil) this.rot += this.opts.speed;
-    }
-
-    this.draw(now);
-    if (!reduceMotion) this.raf = requestAnimationFrame(this.frame);
-  }
-
-  draw(now) {
-    const { ctx, w, h } = this;
-    const R = Math.min(w, h) * this.opts.radius;
-    const cx = w / 2;
-    const cy = h / 2;
-    const ct = Math.cos(this.tilt);
-    const st = Math.sin(this.tilt);
-    const rot = this.rot;
-    const project = (la, lo) => {
-      const l = lo + rot;
-      const cl = Math.cos(la);
-      const x = cl * Math.sin(l);
-      const y = -Math.sin(la);
-      const z = cl * Math.cos(l);
-      return [cx + x * R, cy + (y * ct - z * st) * R, y * st + z * ct];
-    };
-
-    ctx.clearRect(0, 0, w, h);
-
-    let g = ctx.createRadialGradient(cx, cy, R * 0.85, cx, cy, R * 1.5);
-    g.addColorStop(0, "rgba(0,237,100,0.16)");
-    g.addColorStop(1, "rgba(0,237,100,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R * 1.5, 0, TAU);
-    ctx.fill();
-
-    g = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.05, cx, cy, R);
-    g.addColorStop(0, "rgba(0,104,74,0.55)");
-    g.addColorStop(0.6, "rgba(2,40,28,0.72)");
-    g.addColorStop(1, "rgba(1,12,8,0.95)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, TAU);
-    ctx.fill();
-
-    ctx.fillStyle = "#00ed64";
-    for (const [la, lo] of this.points) {
-      const [x, y, z] = project(la, lo);
-      if (z < 0) {
-        ctx.globalAlpha = 0.05;
-        ctx.fillRect(x, y, 1, 1);
-      } else {
-        ctx.globalAlpha = 0.1 + z * 0.6;
-        const s = 0.8 + z * 1.2;
-        ctx.fillRect(x - s / 2, y - s / 2, s, s);
-      }
-    }
-
-    ctx.fillStyle = "#c6ff3d";
-    for (const [la, lo] of this.markers) {
-      const [x, y, z] = project(la, lo);
-      if (z <= 0.02) continue;
-      ctx.globalAlpha = 0.3 + z * 0.7;
-      ctx.beginPath();
-      ctx.arc(x, y, 1.4 + z * 1.4, 0, TAU);
-      ctx.fill();
-    }
-
-    if (this.focus) {
-      const [x, y, z] = project(this.focus[0], this.focus[1]);
-      if (z > 0) {
-        const t = now / 1000;
-        ctx.strokeStyle = "#00ed64";
-        ctx.lineWidth = 1.5;
-        for (let k = 0; k < 3; k++) {
-          const ph = (t * 0.55 + k / 3) % 1;
-          ctx.globalAlpha = (1 - ph) * 0.85 * z;
-          ctx.beginPath();
-          ctx.arc(x, y, 4 + ph * R * 0.16, 0, TAU);
-          ctx.stroke();
-        }
-        const beam = ctx.createLinearGradient(x, y, x, y - R * 0.45);
-        beam.addColorStop(0, "rgba(0,237,100,0.9)");
-        beam.addColorStop(1, "rgba(0,237,100,0)");
-        ctx.globalAlpha = z;
-        ctx.fillStyle = beam;
-        ctx.fillRect(x - 1, y - R * 0.45, 2, R * 0.45);
-        ctx.fillStyle = "rgba(0,237,100,0.35)";
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, TAU);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#eafff2";
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, TAU);
-        ctx.fill();
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
+function valueHTML(value, unit, digits) {
+  if (value == null) return '<span class="na">Non mesuré</span>';
+  return `${esc(fmtNum(value, digits))}<small>${esc(unit)}</small>`;
 }
 
-document.addEventListener("visibilitychange", () => globes.forEach((g) => g.start()));
+function stat(label, ico, value, unit, digits, sub = "") {
+  return `<div class="stat">
+    <div class="stat__label">${ico}<span>${esc(label)}</span></div>
+    <div class="stat__value">${valueHTML(value, unit, digits)}</div>
+    ${sub ? `<div class="stat__sub">${esc(sub)}</div>` : ""}
+  </div>`;
+}
 
-/* =========================================================
-   Cartes
-   ========================================================= */
-
-function cardHTML(doc, i = 0, { poster = false } = {}) {
+function renderFeatured(doc) {
   const s = summarize(doc);
-  const heat = heatOf(s.temp);
-  const px = s.lng == null ? 50 : ((s.lng + 180) / 360) * 100;
-  const py = s.lat == null ? 50 : ((90 - s.lat) / 180) * 100;
-  const label = `${s.call}, ${s.temp == null ? "température inconnue" : `${fmtNum(s.temp)} degrés`}, ${fmtDate(s.ts, true)}`;
-  return `
-  <button class="card${poster ? " card--poster" : ""}" type="button" data-id="${esc(s.id)}"
-    style="--i:${i};--heat:${heat.toFixed(3)};--tc:${heatColor(heat)};--px:${px.toFixed(2)}%;--py:${py.toFixed(2)}%"
-    aria-label="${esc(label)}">
-    <span class="card__map" aria-hidden="true"><span class="card__cross"></span><span class="card__dot"></span></span>
-    <span class="card__fill" aria-hidden="true"></span>
-    <span class="card__spot" aria-hidden="true"></span>
-    <span class="card__top" aria-hidden="true">
-      <span class="tag">${esc(s.type || "N/A")}</span>
-      <span class="card__coords">${esc(fmtCoords(s.lat, s.lng))}</span>
-    </span>
-    <span class="card__body" aria-hidden="true">
-      <span class="card__temp">${fmtTemp(s.temp)}</span>
-      <span class="card__call" data-scramble>${esc(s.call)}</span>
+  state.featuredId = s.id;
+  const root = $("#une");
+  root.removeAttribute("aria-busy");
+  const rh = relativeHumidity(s.temp, s.dew);
+  const windDir = s.windAngle == null ? "" : `${Math.round(s.windAngle)}° ${cardinal(s.windAngle)}`;
+  root.innerHTML = `
+    <div class="une__top">
+      <div class="une__copy">
+        <p class="kicker">${icon.cloudSun} Relevé à la une</p>
+        <h1 class="une__call">${esc(s.callLabel)}</h1>
+        <ul class="meta">
+          <li>${icon.cloud}<span>${esc(TYPE_LABELS[s.type] || "Relevé")}</span></li>
+          <li>${icon.calendar}<span>${esc(fmtDate(s.ts))}</span></li>
+          <li>${icon.pin}<span>${esc(fmtCoords(s.lat, s.lng))}</span></li>
+        </ul>
+        <div class="une__actions">
+          <button class="btn btn--primary" type="button" data-open="${esc(s.id)}">${icon.eye}<span>Voir le relevé</span></button>
+          <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          <button class="btn" type="button" data-shuffle>${icon.refresh}<span>Autre relevé</span></button>
+        </div>
+      </div>
+      <div class="une__side">
+        <p class="une__temp${s.temp == null ? " une__temp--na" : ""}">${s.temp == null ? "Non mesuré" : esc(fmtTemp(s.temp))}</p>
+        <p class="une__mood">${moodIcon(s.temp)}<span>${esc(mood(s.temp))}</span></p>
+      </div>
+    </div>
+    <div class="une__stats">
+      ${stat("Point de rosée", icon.thermo, s.dew, "°C", 1)}
+      ${stat("Pression", icon.gauge, s.pressure, "hPa", 0)}
+      ${stat("Vent", icon.wind, s.windSpeed, "m/s", 1, windDir)}
+      ${stat("Humidité", icon.drop, rh, "%", 0)}
+    </div>`;
+}
+
+function renderFeaturedMessage(title, text) {
+  const root = $("#une");
+  root.removeAttribute("aria-busy");
+  root.innerHTML = `
+    <div class="une__top">
+      <div class="une__copy">
+        <p class="kicker">${icon.cloudSun} Relevé à la une</p>
+        <h1 class="une__call">${esc(title)}</h1>
+        <p class="section__sub">${esc(text)}</p>
+        <div class="une__actions">
+          <button class="btn" type="button" data-retry="une">${icon.refresh}<span>Réessayer</span></button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function cardHTML(doc) {
+  const s = summarize(doc);
+  const bits = [];
+  if (s.windSpeed != null) bits.push(`<span>${icon.wind}<span>${esc(fmtNum(s.windSpeed, 1))} m/s</span></span>`);
+  if (s.pressure != null) bits.push(`<span>${icon.gauge}<span>${esc(fmtNum(s.pressure, 0))} hPa</span></span>`);
+  const label = `${s.callLabel}, ${s.temp == null ? "température non mesurée" : `${fmtNum(s.temp, 1)} degrés`}, ${fmtDate(s.ts, true)}`;
+  return `<button class="card" type="button" data-id="${esc(s.id)}" aria-label="${esc(label)}">
+    <span class="card__top">
+      <span class="tag">${esc(s.type || "Relevé")}</span>
       <span class="card__date">${esc(fmtDate(s.ts, true))}</span>
-      <span class="card__reveal"><span>
-        <span class="card__meta">
-          <span>${icon.wind}${s.windSpeed == null ? "—" : `${fmtNum(s.windSpeed)} m/s`}</span>
-          <span>${icon.gauge}${s.pressure == null ? "—" : `${fmtNum(s.pressure, 0)} hPa`}</span>
-        </span>
-      </span></span>
     </span>
-    <span class="card__play" aria-hidden="true">${icon.play}</span>
+    <span class="card__call">${esc(s.callLabel)}</span>
+    <span class="card__temp${s.temp == null ? " card__temp--na" : ""}">${s.temp == null ? "Non mesuré" : esc(fmtTemp(s.temp))}</span>
+    ${bits.length ? `<span class="card__meta">${bits.join("")}</span>` : ""}
   </button>`;
 }
 
-const top10Item = (doc, i) =>
-  `<div class="top10__item" data-item-id="${esc(String(doc._id))}" style="--i:${i}"><span class="top10__num" aria-hidden="true">${
-    i + 1
-  }</span>${cardHTML(doc, i, { poster: true })}</div>`;
-
-const skeletons = (n, poster = false) =>
-  Array.from(
+function skeletons(n = 6) {
+  return Array.from(
     { length: n },
-    (_, i) => `<div class="card card--skeleton${poster ? " card--poster" : ""}" style="--i:${i}" aria-hidden="true"></div>`
+    () => `<div class="card card--ph" aria-hidden="true"><div class="ph ph--sm"></div><div class="ph ph--md"></div><div class="ph ph--lg"></div></div>`
   ).join("");
+}
 
-const stateBlock = ({ title, text, action = "", error = false }) => `
-  <div class="state${error ? " state--error" : ""}" role="${error ? "alert" : "status"}">
-    <div class="state__orb" aria-hidden="true"></div>
+function emptyBlock({ title, text, ico, action = "", alert = false }) {
+  return `<div class="empty" role="${alert ? "alert" : "status"}">
+    <div class="empty__icon">${ico}</div>
     <h3>${esc(title)}</h3>
     <p>${esc(text)}</p>
     ${action}
   </div>`;
-
-const errorBlock = (message) =>
-  stateBlock({
-    title: "Impossible de charger les relevés",
-    text: message,
-    error: true,
-    action: `<button class="btn btn--ghost btn--sm" type="button" data-retry>${icon.refresh}${roll("Réessayer")}</button>`,
-  });
-
-function patchCards(doc) {
-  const id = String(doc._id);
-  $$(`.card[data-id="${id}"]`).forEach((card) => {
-    card.outerHTML = cardHTML(doc, 0, { poster: card.classList.contains("card--poster") });
-  });
 }
 
-function cardsFor(id) {
-  return $$(`.card[data-id="${id}"]`).map((c) => c.closest(".top10__item") ?? c);
-}
-
-/* =========================================================
-   Hero
-   ========================================================= */
-
-function heroStat(label, value, unit, digits) {
-  return `<div class="stat">
-    <div class="stat__value"><span data-count="${value ?? ""}" data-digits="${digits}">${value == null ? "—" : fmtNum(0, digits)}</span><small>${unit}</small></div>
-    <div class="stat__label">${label}</div>
-  </div>`;
-}
-
-function renderHero(doc) {
-  const s = summarize(doc);
-  featuredId = s.id;
-  const el = $("#hero");
-  el.innerHTML = `
-    <p class="eyebrow">${icon.leaf} Relevé à la une</p>
-    <h1 class="hero__title">${splitTitle(s.call)}</h1>
-    <div class="chips">
-      <span class="chip chip--green">${esc(s.type || "N/A")}</span>
-      <span class="chip">${esc(fmtDate(s.ts))}</span>
-      <span class="chip">${esc(fmtCoords(s.lat, s.lng))}</span>
-    </div>
-    <p class="hero__desc">${esc(describe(s))}</p>
-    <div class="hero__stats">
-      ${heroStat("Température", s.temp, "°C", 1)}
-      ${heroStat("Pression", s.pressure, "hPa", 0)}
-      ${heroStat("Vent", s.windSpeed, "m/s", 1)}
-    </div>
-    <div class="hero__actions">
-      <button class="btn btn--primary btn--lg magnetic" type="button" data-open="${esc(s.id)}">${icon.play}${roll("Voir le relevé")}</button>
-      <button class="btn btn--ghost btn--lg magnetic" type="button" data-edit="${esc(s.id)}">${icon.edit}${roll("Modifier")}</button>
-      <button class="btn btn--ghost btn--lg btn--icon magnetic" type="button" data-shuffle aria-label="Afficher un autre relevé" title="Un autre relevé">${icon.shuffle}</button>
-    </div>`;
-  $$("[data-count]", el).forEach((n) => countUp(n, 1600));
-  if (s.lat != null) heroGlobe?.setFocus(s.lat, s.lng);
-}
-
-async function shuffleHero() {
-  const pool = [...cache.values()].filter((d) => {
-    const s = summarize(d);
-    return s.id !== featuredId && !pendingDeletes.has(s.id) && s.lat != null && s.temp != null;
-  });
-  if (!pool.length) return;
-  const el = $("#hero");
-  el.classList.add("is-leaving");
-  await sleep(reduceMotion ? 0 : 380);
-  renderHero(pool[(Math.random() * pool.length) | 0]);
-  el.classList.remove("is-leaving");
-}
-
-function countUp(el, duration = 1300) {
-  const raw = el.dataset.count;
-  if (raw === "" || raw == null) return;
-  const to = Number(raw);
-  const digits = Number(el.dataset.digits ?? 1);
-  if (reduceMotion) {
-    el.textContent = fmtNum(to, digits);
+function renderGrid() {
+  const docs = visibleDocs();
+  const grid = $("#grid");
+  if (!docs.length) {
+    grid.innerHTML = state.q
+      ? emptyBlock({
+          title: "Aucun résultat",
+          text: "Essayez un autre indicatif ou une partie de l'identifiant de station.",
+          ico: icon.search,
+          action: `<button class="btn" type="button" data-clear>Effacer la recherche</button>`,
+        })
+      : emptyBlock({
+          title: "Aucun relevé",
+          text: "La collection est vide.",
+          ico: icon.cloud,
+          action: `<button class="btn btn--primary" type="button" data-new>${icon.plus}<span>Nouveau relevé</span></button>`,
+        });
     return;
   }
-  const t0 = performance.now();
-  const step = (now) => {
-    const p = Math.min(1, (now - t0) / duration);
-    const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
-    el.textContent = fmtNum(to * eased, digits);
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+  grid.innerHTML = docs.map(cardHTML).join("");
 }
 
-/* =========================================================
-   Rangées
-   ========================================================= */
+function renderMeta() {
+  const shown = Math.max(0, state.total - pending.size);
+  $("#browseCount").textContent = fmtInt(shown);
+  $("#browseSub").textContent = state.q
+    ? `${fmtInt(shown)} ${shown === 1 ? "résultat" : "résultats"} pour « ${state.q} »`
+    : `Page ${fmtInt(state.page)} sur ${fmtInt(state.pages)}`;
+  $("#clearSearch").hidden = !state.q;
+}
 
-const ROWS = [
-  { id: "cold", title: "Grand froid", subtitle: "Les températures les plus basses de la collection", sort: "temp" },
-  { id: "wind", title: "Vents violents", subtitle: "Les rafales les plus fortes jamais relevées", sort: "-wind" },
-  { id: "high", title: "Anticyclones", subtitle: "Là où la pression atmosphérique culmine", sort: "-pressure" },
-  { id: "low", title: "Dépressions", subtitle: "Là où la pression s'effondre", sort: "pressure" },
-  { id: "recent", title: "Les plus récents", subtitle: "Les derniers relevés horodatés, y compris les vôtres", sort: "-ts" },
-];
+function renderPager() {
+  const { page, pages } = state;
+  const pager = $("#pager");
+  if (pages <= 1) {
+    pager.innerHTML = "";
+    return;
+  }
+  const list = [...new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages))].sort((a, b) => a - b);
+  let html = `<button class="btn btn--icon" type="button" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""} aria-label="Page précédente">${icon.chevronL}</button>`;
+  let prev = 0;
+  for (const p of list) {
+    if (p - prev > 1) html += `<span class="pager__gap" aria-hidden="true"></span>`;
+    html += `<button class="btn" type="button" data-page="${p}" ${p === page ? 'aria-current="page"' : ""} aria-label="Page ${p}">${fmtInt(p)}</button>`;
+    prev = p;
+  }
+  html += `<button class="btn btn--icon" type="button" data-page="${page + 1}" ${page >= pages ? "disabled" : ""} aria-label="Page suivante">${icon.chevronR}</button>`;
+  pager.innerHTML = html;
+}
 
-const rowShell = ({ id, title, subtitle, sort }) => `
-  <section class="section reveal-group" id="row-${id}" aria-labelledby="row-${id}-title">
-    <div class="section__head reveal">
-      <div>
-        <h2 class="section__title" id="row-${id}-title">${esc(title)}</h2>
-        <p class="section__sub">${esc(subtitle)}</p>
-      </div>
-      <button class="link-more" type="button" data-explore-sort="${sort}">Tout voir ${svg('<path d="M5 12h14M13 6l6 6-6 6"/>')}</button>
-    </div>
-    <div class="row">
-      <button class="row__arrow row__arrow--prev" type="button" data-dir="-1" aria-label="Défiler vers la gauche">${icon.chevronL}</button>
-      <div class="track" data-track data-reloadable></div>
-      <button class="row__arrow row__arrow--next" type="button" data-dir="1" aria-label="Défiler vers la droite">${icon.chevronR}</button>
-    </div>
-  </section>`;
+function syncFilters() {
+  $$("#filters [data-sort]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sort === state.sort)));
+}
 
-async function loadRow(track, sort, { limit = 20, poster = false } = {}) {
-  track._reload = () => loadRow(track, sort, { limit, poster });
-  track.innerHTML = skeletons(poster ? 7 : 6, poster);
-  track.setAttribute("aria-busy", "true");
+async function loadList() {
+  const id = ++listReq;
+  const grid = $("#grid");
+  grid.setAttribute("aria-busy", "true");
+  grid.innerHTML = skeletons();
   try {
-    const { data } = await api.list({ sort, limit });
-    remember(data);
-    const docs = data.filter((d) => !pendingDeletes.has(String(d._id)));
-    track.innerHTML = docs.length
-      ? docs.map((d, i) => (poster ? top10Item(d, i) : cardHTML(d, i))).join("")
-      : stateBlock({ title: "Rien ici", text: "Aucun relevé ne correspond à cette catégorie." });
-    track.scrollLeft = 0;
-    updateArrows(track);
-    return data;
+    const res = await api.list({ page: state.page, limit: state.limit, sort: state.sort, q: state.q });
+    if (id !== listReq) return;
+    remember(res.data);
+    state.docs = res.data;
+    state.total = res.total;
+    state.pages = Math.max(1, res.pages);
+    renderGrid();
+    renderMeta();
+    renderPager();
   } catch (err) {
-    track.innerHTML = errorBlock(err.message);
-    return [];
+    if (id !== listReq) return;
+    grid.innerHTML = emptyBlock({
+      title: "Impossible de charger les relevés",
+      text: err.message,
+      ico: icon.alert,
+      alert: true,
+      action: `<button class="btn" type="button" data-retry="list">${icon.refresh}<span>Réessayer</span></button>`,
+    });
+    $("#pager").innerHTML = "";
   } finally {
-    track.removeAttribute("aria-busy");
+    if (id === listReq) grid.removeAttribute("aria-busy");
   }
 }
 
-function updateArrows(track) {
-  const row = track.closest(".row");
-  if (!row) return;
-  const max = track.scrollWidth - track.clientWidth;
-  row.classList.toggle("can-prev", track.scrollLeft > 4);
-  row.classList.toggle("can-next", track.scrollLeft < max - 4);
-}
-
-/* =========================================================
-   Explorer
-   ========================================================= */
-
-const SORTS = [
-  ["", "Par défaut"],
-  ["-temp", "Plus chauds"],
-  ["temp", "Plus froids"],
-  ["-wind", "Vent fort"],
-  ["-pressure", "Haute pression"],
-  ["-ts", "Récents"],
-];
-
-const explore = {
-  page: 1,
-  limit: 24,
-  sort: "",
-  q: "",
-  total: 0,
-  pages: 1,
-  reqId: 0,
-
-  async load() {
-    const id = ++this.reqId;
-    const grid = $("#grid");
-    grid._reload = () => this.load();
-    grid.setAttribute("aria-busy", "true");
-    grid.innerHTML = skeletons(12);
-    try {
-      const res = await api.list({ page: this.page, limit: this.limit, sort: this.sort, q: this.q });
-      if (id !== this.reqId) return;
-      remember(res.data);
-      this.total = res.total;
-      this.pages = Math.max(1, res.pages);
-      const docs = res.data.filter((d) => !pendingDeletes.has(String(d._id)));
-      grid.innerHTML = docs.length ? docs.map((d, i) => cardHTML(d, i)).join("") : this.emptyHTML();
-      this.renderMeta();
-      this.renderPager();
-    } catch (err) {
-      if (id !== this.reqId) return;
-      grid.innerHTML = errorBlock(err.message);
-      $("#pager").innerHTML = "";
-    } finally {
-      if (id === this.reqId) grid.removeAttribute("aria-busy");
-    }
-  },
-
-  emptyHTML() {
-    return stateBlock({
-      title: this.q ? `Aucun résultat pour « ${this.q} »` : "Aucun relevé",
-      text: this.q ? "Essayez un autre indicatif ou une partie de l'identifiant de station." : "La collection est vide.",
-      action: `<button class="btn btn--primary btn--sm magnetic" type="button" data-new>${icon.plus}${roll("Créer un relevé")}</button>`,
-    });
-  },
-
-  renderMeta() {
-    $("#exploreCount").textContent = fmtInt(this.total);
-    $("#exploreSub").innerHTML = this.q
-      ? `${fmtInt(this.total)} résultat${this.total > 1 ? "s" : ""} pour « <mark>${esc(this.q)}</mark> » · <button class="link-more" type="button" data-clear-search>Effacer la recherche</button>`
-      : `${fmtInt(this.total)} relevés · page ${this.page} sur ${fmtInt(this.pages)}`;
-  },
-
-  renderPager() {
-    const { page, pages } = this;
-    if (pages <= 1) {
-      $("#pager").innerHTML = "";
+async function loadFeatured() {
+  try {
+    const { data } = await api.list({ sort: "-ts", limit: 12 });
+    remember(data);
+    const doc = data.find((d) => !pending.has(String(d._id)) && summarize(d).temp != null) || data.find((d) => !pending.has(String(d._id)));
+    if (!doc) {
+      renderFeaturedMessage("Aucun relevé", "La collection est vide.");
       return;
     }
-    const list = [...new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages))].sort((a, b) => a - b);
-    let html = `<button type="button" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""} aria-label="Page précédente">${icon.chevronL}</button>`;
-    let prev = 0;
-    for (const p of list) {
-      if (p - prev > 1) html += `<span class="pager__gap" aria-hidden="true">…</span>`;
-      html += `<button type="button" data-page="${p}" ${p === page ? 'aria-current="page"' : ""} aria-label="Page ${p}">${fmtInt(p)}</button>`;
-      prev = p;
-    }
-    html += `<button type="button" data-page="${page + 1}" ${page >= pages ? "disabled" : ""} aria-label="Page suivante">${icon.chevronR}</button>`;
-    $("#pager").innerHTML = html;
-  },
-
-  renderSeg() {
-    const seg = $("#sortSeg");
-    if (!seg.querySelector("button")) {
-      seg.insertAdjacentHTML(
-        "beforeend",
-        SORTS.map(([v, label]) => `<button type="button" data-sort="${v}" aria-pressed="false">${label}</button>`).join("")
-      );
-    }
-    $$("button", seg).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sort === this.sort)));
-    movePill($(".seg__pill", seg), $('button[aria-pressed="true"]', seg));
-  },
-
-  setSort(sort) {
-    this.sort = sort;
-    this.page = 1;
-    this.renderSeg();
-    this.load();
-  },
-
-  go(page) {
-    this.page = clamp(page, 1, this.pages);
-    this.load();
-    $("#explore").scrollIntoView({ behavior: smooth(), block: "start" });
-  },
-
-  search(q) {
-    this.q = q.trim();
-    this.page = 1;
-    this.load();
-  },
-};
-
-function movePill(pill, target) {
-  if (!pill) return;
-  if (!target) {
-    pill.style.opacity = "0";
-    return;
+    renderFeatured(doc);
+  } catch (err) {
+    renderFeaturedMessage("Impossible de charger le relevé", err.message);
   }
-  pill.style.opacity = "1";
-  pill.style.width = `${target.offsetWidth}px`;
-  pill.style.transform = `translateX(${target.offsetLeft}px)`;
 }
 
-/* =========================================================
-   Modale
-   ========================================================= */
+async function shuffleFeatured() {
+  const token = ++featureToken;
+  let pool = [...cache.values()].filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
+  if (!pool.length) {
+    try {
+      const { data } = await api.list({ sort: "-ts", limit: 24, page: 1 + ((Math.random() * 4) | 0) });
+      if (token !== featureToken) return;
+      remember(data);
+      pool = data.filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
+    } catch (err) {
+      if (token !== featureToken) return;
+      toast({ msg: err.message, type: "error" });
+      return;
+    }
+  }
+  if (token !== featureToken) return;
+  if (!pool.length) {
+    toast({ msg: "Pas d'autre relevé à afficher." });
+    return;
+  }
+  renderFeatured(pool[(Math.random() * pool.length) | 0]);
+}
 
-const modalState = { opener: null, globe: null, mode: null, dirty: false, closeTimer: null };
-let keyboardMode = false;
-let lastPointer = { x: innerWidth / 2, y: innerHeight / 2 };
-let closeArmedUntil = 0;
+function setSort(sort) {
+  if (state.sort === sort) return;
+  state.sort = sort;
+  state.page = 1;
+  syncFilters();
+  loadList();
+}
+
+function goPage(page) {
+  state.page = clamp(page, 1, state.pages);
+  loadList();
+  $("#releves").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+}
+
+function search(q) {
+  const next = q.trim();
+  if (next === state.q) return;
+  state.q = next;
+  state.page = 1;
+  loadList();
+  if (next) {
+    const rect = $("#releves").getBoundingClientRect();
+    if (rect.top > innerHeight * 0.4 || rect.bottom < 80) {
+      $("#releves").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
+  }
+}
+
+function clearSearch() {
+  $("#searchInput").value = "";
+  search("");
+}
+
+/* Fenêtre */
 
 function lockScroll(on) {
-  const scrollbar = innerWidth - document.documentElement.clientWidth;
+  const gap = innerWidth - document.documentElement.clientWidth;
   document.documentElement.style.overflow = on ? "hidden" : "";
-  document.body.style.paddingRight = on && scrollbar > 0 ? `${scrollbar}px` : "";
-  $("#main").inert = on;
-  $("#nav").inert = on;
+  document.body.style.paddingRight = on && gap > 0 ? `${gap}px` : "";
+  $("main").inert = on;
+  $(".header").inert = on;
+  $(".footer").inert = on;
 }
 
-function openModal(render) {
-  const modal = $("#modal");
-  const panel = $(".modal__panel", modal);
+function openModal(mount) {
+  const root = $("#modal");
+  const panel = $(".modal__panel", root);
   const content = $("#modalContent");
-
-  const mount = () => {
-    modalState.globe?.destroy();
-    modalState.globe = null;
-    modalState.dirty = false;
-    render(content);
-  };
-
-  if (!modal.hidden && !modal.classList.contains("is-closing")) {
-    content.classList.add("is-swapping");
-    setTimeout(
-      () => {
-        mount();
-        panel.scrollTop = 0;
-        content.classList.remove("is-swapping");
-        focusInModal();
-      },
-      reduceMotion ? 0 : 220
-    );
-    return;
-  }
-
-  const wasClosing = modal.classList.contains("is-closing");
-  clearTimeout(modalState.closeTimer);
-  if (!wasClosing) modalState.opener = document.activeElement;
-  mount();
-  modal.hidden = false;
-  modal.classList.remove("is-closing");
-  if (!wasClosing) lockScroll(true);
-
-  const rect = panel.getBoundingClientRect();
-  let origin = lastPointer;
-  if (keyboardMode && modalState.opener?.getBoundingClientRect) {
-    const r = modalState.opener.getBoundingClientRect();
-    origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }
-  const ox = origin.x - rect.left;
-  const oy = origin.y - rect.top;
-  const radius = Math.max(
-    Math.hypot(ox, oy),
-    Math.hypot(rect.width - ox, oy),
-    Math.hypot(ox, rect.height - oy),
-    Math.hypot(rect.width - ox, rect.height - oy)
-  );
-  panel.style.setProperty("--ox", `${ox}px`);
-  panel.style.setProperty("--oy", `${oy}px`);
-  panel.style.setProperty("--r", `${Math.ceil(radius + 20)}px`);
-
-  requestAnimationFrame(() => requestAnimationFrame(() => modal.classList.add("is-open")));
+  clearTimeout(modal.timer);
+  modal.dirty = false;
+  modal.closeArmed = 0;
+  if (root.hidden) modal.opener = document.activeElement;
+  mount(content);
+  root.hidden = false;
+  lockScroll(true);
+  requestAnimationFrame(() => root.classList.add("is-open"));
   panel.focus({ preventScroll: true });
-  focusInModal();
-}
-
-function focusInModal() {
-  if (modalState.mode !== "form") return;
-  setTimeout(() => $("#modalContent input")?.focus({ preventScroll: true }), reduceMotion ? 0 : 450);
+  if (modal.mode === "form") {
+    setTimeout(() => $("#modalContent input")?.focus({ preventScroll: true }), reduceMotion ? 0 : 40);
+  }
 }
 
 function closeModal() {
-  const modal = $("#modal");
-  if (modal.hidden || modal.classList.contains("is-closing")) return;
-  modal.classList.remove("is-open");
-  modal.classList.add("is-closing");
-  modalState.closeTimer = setTimeout(
-    () => {
-      modal.hidden = true;
-      modal.classList.remove("is-closing");
-      modalState.globe?.destroy();
-      modalState.globe = null;
-      modalState.mode = null;
-      $("#modalContent").innerHTML = "";
-      lockScroll(false);
-      if (modalState.opener?.isConnected) modalState.opener.focus({ preventScroll: true });
-    },
-    reduceMotion ? 0 : 520
-  );
+  const root = $("#modal");
+  if (root.hidden) return;
+  root.classList.remove("is-open");
+  const finish = () => {
+    root.hidden = true;
+    modal.mode = null;
+    modal.dirty = false;
+    $("#modalContent").innerHTML = "";
+    lockScroll(false);
+    if (modal.opener?.isConnected) modal.opener.focus({ preventScroll: true });
+  };
+  if (reduceMotion) finish();
+  else modal.timer = setTimeout(finish, 150);
 }
 
 function requestClose() {
-  if (modalState.mode === "form" && modalState.dirty && Date.now() > closeArmedUntil) {
-    closeArmedUntil = Date.now() + 3500;
-    const panel = $(".modal__panel");
-    panel.classList.remove("is-shake");
-    void panel.offsetWidth;
-    panel.classList.add("is-shake");
-    toast({ msg: "Modifications non enregistrées. Refermez à nouveau pour les abandonner.", type: "error", duration: 3500 });
+  if (modal.mode === "form" && modal.dirty && Date.now() > modal.closeArmed) {
+    modal.closeArmed = Date.now() + 3500;
+    toast({ msg: "Modifications non enregistrées. Fermez encore une fois pour les abandonner.", type: "error", duration: 3500 });
     return;
   }
   closeModal();
@@ -916,10 +509,9 @@ function requestClose() {
 
 function trapFocus(e) {
   const panel = $(".modal__panel");
-  const items = $$(
-    'button:not([disabled]), [href], input:not([disabled]), select, textarea, summary, [tabindex]:not([tabindex="-1"])',
-    panel
-  ).filter((el) => el.offsetParent !== null);
+  const items = $$("button:not([disabled]), [href], input:not([disabled]), select, textarea, summary", panel).filter(
+    (el) => el.offsetParent !== null || el === document.activeElement
+  );
   if (!items.length) return;
   const first = items[0];
   const last = items[items.length - 1];
@@ -932,7 +524,22 @@ function trapFocus(e) {
   }
 }
 
-/* ---------- Détail ---------- */
+async function ensureDoc(id) {
+  if (cache.has(id)) return cache.get(id);
+  const doc = await api.get(id);
+  cache.set(id, doc);
+  return doc;
+}
+
+function replaceDoc(saved) {
+  const id = String(saved._id);
+  cache.set(id, saved);
+  state.docs = state.docs.map((d) => (String(d._id) === id ? saved : d));
+  renderGrid();
+  if (state.featuredId === id) renderFeatured(saved);
+}
+
+/* Détail */
 
 function highlightJSON(obj) {
   const json = JSON.stringify(obj, null, 2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -948,83 +555,63 @@ function highlightJSON(obj) {
   );
 }
 
+function measure({ label, ico, value, unit, digits = 1, sub = "", wind = false, compass = "" }) {
+  return `<div class="measure${wind ? " measure--wind" : ""}">
+    <div class="measure__label">${ico}<span>${esc(label)}</span></div>
+    <div class="measure__value">${valueHTML(value, unit, digits)}</div>
+    ${sub ? `<div class="measure__sub">${esc(sub)}</div>` : ""}
+    ${compass}
+  </div>`;
+}
+
 function renderDetail(doc) {
   const s = summarize(doc);
-  let n = 0;
-  const tile = ({ label, ico, value, unit, digits = 1, extra = "", cls = "" }) => `
-    <div class="tile ${cls}" style="--i:${n++}">
-      <div class="tile__label">${ico}${label}</div>
-      <div class="tile__value">${
-        value == null ? '<span class="tile__na">—</span>' : `<span data-count="${value}" data-digits="${digits}">${fmtNum(0, digits)}</span><small>${unit}</small>`
-      }</div>
-      ${extra}
-    </div>`;
-  const meter = (v) => `<div class="meter" aria-hidden="true"><span style="--v:${clamp(v, 0.02, 1).toFixed(3)}"></span></div>`;
   const rh = relativeHumidity(s.temp, s.dew);
+  const windSub = s.windAngle == null ? "" : `${Math.round(s.windAngle)}° ${cardinal(s.windAngle)}`;
+  const compass =
+    s.windAngle == null
+      ? ""
+      : `<div class="compass" style="--a:${Number(s.windAngle)}deg" aria-hidden="true"><span class="compass__n">N</span><span class="compass__needle"></span></div>`;
 
   return (root) => {
-    modalState.mode = "detail";
+    modal.mode = "detail";
     root.innerHTML = `
-    <article class="detail">
-      <header class="detail__hero">
-        <div class="detail__globe"><canvas aria-hidden="true"></canvas></div>
-        <div>
-          <p class="eyebrow">${icon.leaf} ${esc(TYPE_LABELS[s.type] ?? "Relevé météo")}</p>
-          <h2 class="detail__title" id="modalTitle">${splitTitle(s.call)}</h2>
-          <p class="detail__st"><code>${esc(s.st || "station inconnue")}</code></p>
-          <div class="chips">
-            <span class="chip chip--green">${esc(s.type || "N/A")}</span>
-            <span class="chip">${esc(fmtDate(s.ts))}</span>
-            <span class="chip">${esc(fmtCoords(s.lat, s.lng))}</span>
-          </div>
-          <div class="detail__actions">
-            <button class="btn btn--primary magnetic" type="button" data-edit="${esc(s.id)}">${icon.edit}${roll("Modifier")}</button>
-            <button class="btn btn--danger magnetic" type="button" data-delete="${esc(s.id)}">${icon.trash}${roll("Supprimer")}</button>
-          </div>
+      <article class="detail">
+        <p class="detail__kicker">${esc(TYPE_LABELS[s.type] || "Relevé météo")}</p>
+        <h2 class="detail__title" id="modalTitle">${esc(s.callLabel)}</h2>
+        <p class="detail__st">${esc(s.st || "Station inconnue")}</p>
+        <ul class="meta">
+          <li>${icon.calendar}<span>${esc(fmtDate(s.ts))}</span></li>
+          <li>${icon.pin}<span>${esc(fmtCoords(s.lat, s.lng))}</span></li>
+        </ul>
+        <div class="detail__actions">
+          <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          <button class="btn" type="button" data-delete="${esc(s.id)}">${icon.trash}<span>Supprimer</span></button>
         </div>
-      </header>
-      <div class="detail__body">
-        <section class="tiles" aria-label="Mesures">
-          ${tile({ label: "Température", ico: icon.thermo, value: s.temp, unit: "°C", extra: s.temp == null ? "" : meter(heatOf(s.temp)) })}
-          ${tile({ label: "Point de rosée", ico: icon.drop, value: s.dew, unit: "°C" })}
-          ${tile({ label: "Humidité", ico: icon.humidity, value: rh, unit: "%", digits: 0, extra: rh == null ? "" : meter(rh / 100) })}
-          ${tile({ label: "Pression", ico: icon.gauge, value: s.pressure, unit: "hPa", extra: s.pressure == null ? "" : meter((s.pressure - 950) / 100) })}
-          <div class="tile" style="--i:${n++}">
-            <div class="tile__label">${icon.wind}Vent</div>
-            <div class="tile__value">${
-              s.windSpeed == null ? '<span class="tile__na">—</span>' : `<span data-count="${s.windSpeed}" data-digits="1">0</span><small>m/s</small>`
-            }</div>
-            <div class="tile__sub">${s.windAngle == null ? "Direction inconnue" : `${s.windAngle}° · ${cardinal(s.windAngle)}`}</div>
-            <div class="compass" style="--a:${s.windAngle ?? 0}deg" ${s.windAngle == null ? "data-na" : ""} aria-hidden="true">
-              <span class="compass__needle"></span><span class="compass__n">N</span>
-            </div>
-          </div>
-          ${tile({ label: "Visibilité", ico: icon.eye, value: s.visibility == null ? null : s.visibility / 1000, unit: "km" })}
-          ${tile({ label: "Plafond nuageux", ico: icon.cloud, value: s.ceiling, unit: "m", digits: 0 })}
-          ${tile({ label: "Altitude", ico: icon.mountain, value: s.elevation, unit: "m", digits: 0 })}
-        </section>
+        <div class="measures">
+          ${measure({ label: "Température", ico: icon.thermo, value: s.temp, unit: "°C" })}
+          ${measure({ label: "Point de rosée", ico: icon.thermo, value: s.dew, unit: "°C" })}
+          ${measure({ label: "Humidité", ico: icon.drop, value: rh, unit: "%", digits: 0 })}
+          ${measure({ label: "Pression", ico: icon.gauge, value: s.pressure, unit: "hPa", digits: 0 })}
+          ${measure({ label: "Vent", ico: icon.wind, value: s.windSpeed, unit: "m/s", sub: windSub, wind: s.windAngle != null, compass })}
+          ${measure({ label: "Visibilité", ico: icon.eye, value: s.visibility == null ? null : s.visibility / 1000, unit: "km" })}
+          ${measure({ label: "Plafond nuageux", ico: icon.cloud, value: s.ceiling, unit: "m", digits: 0 })}
+          ${measure({ label: "Altitude", ico: icon.mountain, value: s.elevation, unit: "m", digits: 0 })}
+        </div>
         <details class="raw">
-          <summary>${icon.code} Document brut <span class="raw__hint">JSON · ${Object.keys(doc).length} champs</span><span class="raw__chev">${icon.chevronR}</span></summary>
+          <summary>${icon.code}<span>Document</span><span class="raw__chev">${icon.chevronR}</span></summary>
           <div class="raw__body">
-            <button class="btn btn--ghost btn--sm raw__copy" type="button" data-copy="${esc(s.id)}">${icon.copy}${roll("Copier")}</button>
+            <div class="raw__bar">
+              <button class="btn" type="button" data-copy="${esc(s.id)}">${icon.copy}<span>Copier</span></button>
+            </div>
             <pre><code>${highlightJSON(doc)}</code></pre>
           </div>
         </details>
-      </div>
-    </article>`;
-
-    const globe = new Globe($(".detail__globe canvas", root), { dots: 1100, speed: 0, radius: 0.42, rot: Math.random() * TAU });
-    modalState.globe = globe;
-    if (s.lat != null) {
-      globe.focus = [s.lat * DEG, s.lng * DEG];
-      setTimeout(() => modalState.globe === globe && globe.spinTo(s.lat, s.lng), reduceMotion ? 0 : 300);
-    }
-    $$("[data-count]", root).forEach((el) => countUp(el));
-    requestAnimationFrame(() => $$(".compass", root).forEach((c) => c.classList.add("is-on")));
+      </article>`;
   };
 }
 
-/* ---------- Formulaire ---------- */
+/* Formulaire */
 
 function field({ name, label, type = "text", value = "", required = false, hint = "", min, max, step, list, maxlength }) {
   const id = `f-${name}`;
@@ -1036,15 +623,14 @@ function field({ name, label, type = "text", value = "", required = false, hint 
     list ? `list="${list}"` : "",
     maxlength ? `maxlength="${maxlength}"` : "",
     type === "number" ? 'inputmode="decimal"' : "",
-  ].join(" ");
-  return `
-    <div class="field" data-hint="${esc(hint)}">
-      <div class="field__box">
-        <input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" placeholder=" " autocomplete="off" aria-describedby="${id}-msg" ${attrs} />
-        <label for="${id}">${esc(label)}${required ? '<i class="req" aria-hidden="true"></i>' : ""}</label>
-      </div>
-      <span class="field__msg" id="${id}-msg">${esc(hint)}</span>
-    </div>`;
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `<div class="field" data-hint="${esc(hint)}">
+    <label for="${id}">${esc(label)}${required ? ' <span class="req" aria-hidden="true">*</span>' : ""}</label>
+    <input id="${id}" name="${name}" type="${type}" value="${esc(value ?? "")}" autocomplete="off" aria-describedby="${id}-msg" ${attrs} />
+    <p class="field__msg" id="${id}-msg">${esc(hint)}</p>
+  </div>`;
 }
 
 const numRule = (min, max, required = false) => (v, input) => {
@@ -1154,58 +740,57 @@ function renderForm(doc = null) {
   const isEdit = !!s;
 
   return (root) => {
-    modalState.mode = "form";
+    modal.mode = "form";
     root.innerHTML = `
-    <form class="form" novalidate>
-      <header>
-        <p class="eyebrow">${icon.leaf} ${isEdit ? "Modifier le relevé" : "Nouveau relevé"}</p>
-        <h2 class="form__title" id="modalTitle">${isEdit ? esc(s.call) : "Créer un relevé"}</h2>
-        <p class="form__sub">Les champs marqués d'un point vert sont obligatoires. Une mesure laissée vide est enregistrée comme « non mesurée », comme dans le dataset officiel.</p>
-      </header>
+      <form class="form" novalidate>
+        <h2 class="form__title" id="modalTitle">${isEdit ? esc(s.callLabel) : "Nouveau relevé"}</h2>
+        <p class="form__lead">Les champs marqués d'une étoile sont obligatoires. Une mesure laissée vide est enregistrée comme non mesurée.</p>
 
-      <div class="form__group" style="--i:0">
-        <h3>Identité</h3>
-        <div class="form__grid">
-          ${field({ name: "callLetters", label: "Indicatif", value: s && s.call !== "—" ? s.call : "", hint: "Ex. VCSZ", maxlength: 12 })}
-          ${field({ name: "st", label: "Identifiant station", value: s?.st, required: true, hint: "Ex. x+47600-047900" })}
-          ${field({ name: "type", label: "Type de relevé", value: s?.type, list: "typeList", hint: "Ex. FM-13 (navire), FM-15 (aéroport)" })}
-          ${field({ name: "ts", label: "Date et heure (UTC)", type: "datetime-local", value: toInputDate(s?.ts ?? new Date()), required: true })}
+        <div class="form__group">
+          <h3>Identité</h3>
+          <div class="form__grid">
+            ${field({ name: "callLetters", label: "Indicatif", value: s?.call, hint: "Exemple : VCSZ", maxlength: 12 })}
+            ${field({ name: "st", label: "Identifiant station", value: s?.st, required: true, hint: "Exemple : x+47600-047900" })}
+            ${field({ name: "type", label: "Type de relevé", value: s?.type, list: "typeList", hint: "Exemple : FM-13 pour un navire, FM-15 pour un aéroport" })}
+            ${field({ name: "ts", label: "Date et heure (UTC)", type: "datetime-local", value: toInputDate(s?.ts ?? new Date()), required: true })}
+          </div>
+          <datalist id="typeList">${Object.entries(TYPE_LABELS)
+            .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`)
+            .join("")}</datalist>
         </div>
-        <datalist id="typeList">${Object.entries(TYPE_LABELS)
-          .map(([k, v]) => `<option value="${k}">${v}</option>`)
-          .join("")}</datalist>
-      </div>
 
-      <div class="form__group" style="--i:1">
-        <h3>Position</h3>
-        <div class="picker" data-picker ${s?.lat == null ? "data-empty" : ""} aria-hidden="true">
-          <span class="picker__dot"></span>
-          <span class="picker__hint">Cliquez sur la carte pour placer la station</span>
-          <span class="picker__readout"></span>
+        <div class="form__group">
+          <h3>Position</h3>
+          <div class="picker${s?.lat == null ? " is-empty" : ""}" data-picker aria-hidden="true">
+            <span class="picker__eq"></span>
+            <span class="picker__mer"></span>
+            <span class="picker__dot"></span>
+            <span class="picker__hint">Cliquez pour placer la station</span>
+            <span class="picker__readout"></span>
+          </div>
+          <div class="form__grid form__grid--3">
+            ${field({ name: "lat", label: "Latitude", type: "number", value: inputValue(s?.lat), required: true, min: -90, max: 90, step: "any", hint: "De -90 à 90" })}
+            ${field({ name: "lng", label: "Longitude", type: "number", value: inputValue(s?.lng), required: true, min: -180, max: 180, step: "any", hint: "De -180 à 180" })}
+            ${field({ name: "elevation", label: "Altitude (m)", type: "number", value: inputValue(s?.elevation), step: "any" })}
+          </div>
         </div>
-        <div class="form__grid form__grid--3">
-          ${field({ name: "lat", label: "Latitude", type: "number", value: inputValue(s?.lat), required: true, min: -90, max: 90, step: "any", hint: "−90 à 90" })}
-          ${field({ name: "lng", label: "Longitude", type: "number", value: inputValue(s?.lng), required: true, min: -180, max: 180, step: "any", hint: "−180 à 180" })}
-          ${field({ name: "elevation", label: "Altitude (m)", type: "number", value: inputValue(s?.elevation), step: "any" })}
-        </div>
-      </div>
 
-      <div class="form__group" style="--i:2">
-        <h3>Mesures</h3>
-        <div class="form__grid form__grid--3">
-          ${field({ name: "temp", label: "Température (°C)", type: "number", value: inputValue(s?.temp), step: "any" })}
-          ${field({ name: "dew", label: "Point de rosée (°C)", type: "number", value: inputValue(s?.dew), step: "any" })}
-          ${field({ name: "pressure", label: "Pression (hPa)", type: "number", value: inputValue(s?.pressure), step: "any" })}
-          ${field({ name: "windAngle", label: "Direction du vent (°)", type: "number", value: inputValue(s?.windAngle), step: "any", hint: "0 = Nord, 90 = Est" })}
-          ${field({ name: "windSpeed", label: "Vitesse du vent (m/s)", type: "number", value: inputValue(s?.windSpeed), step: "any" })}
+        <div class="form__group">
+          <h3>Mesures</h3>
+          <div class="form__grid form__grid--3">
+            ${field({ name: "temp", label: "Température (°C)", type: "number", value: inputValue(s?.temp), step: "any" })}
+            ${field({ name: "dew", label: "Point de rosée (°C)", type: "number", value: inputValue(s?.dew), step: "any" })}
+            ${field({ name: "pressure", label: "Pression (hPa)", type: "number", value: inputValue(s?.pressure), step: "any" })}
+            ${field({ name: "windAngle", label: "Direction du vent (°)", type: "number", value: inputValue(s?.windAngle), step: "any", hint: "0 pour le nord, 90 pour l'est" })}
+            ${field({ name: "windSpeed", label: "Vitesse du vent (m/s)", type: "number", value: inputValue(s?.windSpeed), step: "any" })}
+          </div>
         </div>
-      </div>
 
-      <footer class="form__actions">
-        <button class="btn btn--ghost" type="button" ${isEdit ? `data-open="${esc(s.id)}"` : "data-close"}>${roll("Annuler")}</button>
-        <button class="btn btn--primary magnetic" type="submit">${icon.check}${roll(isEdit ? "Enregistrer" : "Créer le relevé")}</button>
-      </footer>
-    </form>`;
+        <div class="form__actions">
+          <button class="btn" type="button" ${isEdit ? `data-cancel="${esc(s.id)}"` : "data-close"}>Annuler</button>
+          <button class="btn btn--primary" type="submit">${icon.check}<span>${isEdit ? "Enregistrer" : "Créer le relevé"}</span></button>
+        </div>
+      </form>`;
 
     const form = $("form", root);
     const picker = $("[data-picker]", form);
@@ -1216,8 +801,9 @@ function renderForm(doc = null) {
     const syncPicker = () => {
       const lat = Number(latInput.value);
       const lng = Number(lngInput.value);
-      if (latInput.value === "" || lngInput.value === "" || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      picker.removeAttribute("data-empty");
+      const ok = latInput.value !== "" && lngInput.value !== "" && Number.isFinite(lat) && Number.isFinite(lng);
+      picker.classList.toggle("is-empty", !ok);
+      if (!ok) return;
       picker.style.setProperty("--px", `${((clamp(lng, -180, 180) + 180) / 360) * 100}%`);
       picker.style.setProperty("--py", `${((90 - clamp(lat, -90, 90)) / 180) * 100}%`);
     };
@@ -1235,23 +821,26 @@ function renderForm(doc = null) {
       const { lat, lng } = pointToCoords(e);
       readout.textContent = fmtCoords(lat, lng);
     });
+    picker.addEventListener("pointerleave", () => {
+      readout.textContent = "";
+    });
     picker.addEventListener("click", (e) => {
       const { lat, lng } = pointToCoords(e);
       latInput.value = lat;
       lngInput.value = lng;
       validateField(latInput);
       validateField(lngInput);
-      modalState.dirty = true;
+      modal.dirty = true;
       syncPicker();
     });
 
     form.addEventListener("input", (e) => {
-      modalState.dirty = true;
+      modal.dirty = true;
       if (e.target === latInput || e.target === lngInput) syncPicker();
       if (e.target.closest(".field")?.classList.contains("has-error")) validateField(e.target);
     });
     form.addEventListener("focusout", (e) => {
-      if (e.target.matches("input") && e.target.value !== "") validateField(e.target);
+      if (e.target.matches?.("input") && e.target.value !== "") validateField(e.target);
     });
 
     form.addEventListener("submit", async (e) => {
@@ -1259,33 +848,34 @@ function renderForm(doc = null) {
       const inputs = $$("input[name]", form);
       const ok = inputs.map(validateField).every(Boolean);
       if (!ok) {
-        const firstInvalid = inputs.find((i) => i.getAttribute("aria-invalid") === "true");
-        firstInvalid?.focus();
-        firstInvalid?.scrollIntoView({ behavior: smooth(), block: "center" });
+        const first = inputs.find((i) => i.getAttribute("aria-invalid") === "true");
+        first?.focus();
         return;
       }
-
       const btn = $('[type="submit"]', form);
       btn.classList.add("is-loading");
       btn.disabled = true;
       try {
         const values = readForm(form);
         const saved = isEdit ? await api.update(s.id, toUpdatePayload(values)) : await api.create(toCreatePayload(values));
-        cache.set(String(saved._id), saved);
-        remember([saved]);
-        modalState.dirty = false;
+        modal.dirty = false;
         if (isEdit) {
-          patchCards(saved);
-          if (featuredId === s.id) renderHero(saved);
+          replaceDoc(saved);
           openModal(renderDetail(saved));
-          toast({ msg: `Relevé « ${saved.callLetters || "sans indicatif"} » mis à jour.` });
+          toast({ msg: "Relevé enregistré." });
         } else {
           closeModal();
           toast({
-            msg: `Relevé « ${saved.callLetters || "sans indicatif"} » créé.`,
+            msg: "Relevé créé.",
             action: { label: "Voir", run: () => openModal(renderDetail(saved)) },
           });
-          refreshAfterCreate();
+          state.sort = "-ts";
+          state.page = 1;
+          state.q = "";
+          $("#searchInput").value = "";
+          syncFilters();
+          renderFeatured(saved);
+          loadList();
         }
       } catch (err) {
         toast({ msg: err.message, type: "error" });
@@ -1297,90 +887,82 @@ function renderForm(doc = null) {
   };
 }
 
-function refreshAfterCreate() {
-  const recent = $("#row-recent [data-track]");
-  recent?._reload?.();
-  explore.load();
-}
-
-/* ---------- Suppression avec annulation ---------- */
+/* Suppression */
 
 function scheduleDelete(id) {
   const doc = cache.get(id);
-  if (!doc || pendingDeletes.has(id)) return;
+  if (!doc || pending.has(id)) return;
   const name = doc.callLetters || "sans indicatif";
+  const wasFeatured = state.featuredId === id;
   closeModal();
+  pending.add(id);
+  renderGrid();
+  renderMeta();
+  if (wasFeatured) shuffleFeatured();
 
-  const els = cardsFor(id);
-  els.forEach((el) => el.classList.add("is-removing"));
-  const hideTimer = setTimeout(() => els.forEach((el) => (el.hidden = true)), reduceMotion ? 0 : 450);
-
-  const restore = () => {
-    clearTimeout(hideTimer);
-    els.forEach((el) => {
-      el.hidden = false;
-      el.classList.remove("is-removing");
-    });
-  };
-
-  pendingDeletes.set(id, true);
-  remember([]);
-
+  let undone = false;
   toast({
-    msg: `« ${name} » supprimé.`,
-    type: "delete",
+    msg: `Relevé ${name} retiré.`,
+    mark: icon.trash,
     duration: 6000,
     action: {
       label: "Annuler",
       run: () => {
-        pendingDeletes.delete(id);
-        restore();
-        remember([]);
+        undone = true;
+        pending.delete(id);
+        featureToken += 1;
+        renderGrid();
+        renderMeta();
+        if (wasFeatured) renderFeatured(doc);
         toast({ msg: "Suppression annulée." });
       },
     },
     onExpire: async () => {
+      if (undone) return;
       try {
         await api.remove(id);
-        pendingDeletes.delete(id);
+        pending.delete(id);
         cache.delete(id);
-        els.forEach((el) => el.remove());
-        explore.total = Math.max(0, explore.total - 1);
-        explore.renderMeta();
-        if (featuredId === id) shuffleHero();
+        state.docs = state.docs.filter((d) => String(d._id) !== id);
+        state.total = Math.max(0, state.total - 1);
+        if (!visibleDocs().length && state.page > 1) {
+          state.page -= 1;
+          loadList();
+        } else {
+          renderGrid();
+          renderMeta();
+        }
       } catch (err) {
-        pendingDeletes.delete(id);
-        restore();
-        toast({ msg: `Suppression impossible : ${err.message}`, type: "error" });
+        pending.delete(id);
+        renderGrid();
+        renderMeta();
+        toast({ msg: err.message, type: "error" });
       }
     },
   });
 }
 
 addEventListener("pagehide", () => {
-  for (const id of pendingDeletes.keys()) api.remove(id, { keepalive: true }).catch(() => {});
+  for (const id of pending) api.remove(id, { keepalive: true }).catch(() => {});
 });
 
-/* =========================================================
-   Toasts
-   ========================================================= */
+/* Notifications */
 
-function toast({ msg, type = "success", action, duration = 4200, onExpire }) {
+function toast({ msg, type = "ok", mark, action, duration = 4200, onExpire }) {
   const el = document.createElement("div");
-  el.className = `toast toast--${type}`;
+  el.className = `toast${type === "error" ? " toast--error" : ""}`;
   el.setAttribute("role", type === "error" ? "alert" : "status");
   el.style.setProperty("--d", `${duration}ms`);
-  const ico = type === "error" ? icon.alert : type === "delete" ? icon.trash : icon.check;
   el.innerHTML = `
-    <span class="toast__icon">${ico}</span>
+    <span class="toast__icon">${mark || (type === "error" ? icon.alert : icon.check)}</span>
     <p class="toast__msg">${esc(msg)}</p>
-    ${action ? `<button class="toast__action" type="button">${roll(action.label)}</button>` : ""}
-    <button class="toast__close" type="button" aria-label="Fermer la notification">${icon.close}</button>
+    ${action ? `<button class="btn toast__action" type="button">${esc(action.label)}</button>` : ""}
+    <button class="toast__x" type="button" aria-label="Fermer">${icon.x}</button>
     <span class="toast__bar" aria-hidden="true"></span>`;
   $("#toasts").append(el);
 
   let remaining = duration;
-  let startedAt = Date.now();
+  let started = Date.now();
   let timer = null;
   let settled = false;
 
@@ -1390,100 +972,86 @@ function toast({ msg, type = "success", action, duration = 4200, onExpire }) {
     clearTimeout(timer);
     if (expired) onExpire?.();
     el.classList.add("is-leaving");
-    setTimeout(() => el.remove(), reduceMotion ? 0 : 360);
+    setTimeout(() => el.remove(), reduceMotion ? 0 : 150);
   };
   const arm = () => {
-    startedAt = Date.now();
+    started = Date.now();
     timer = setTimeout(() => dismiss(true), remaining);
   };
 
   el.addEventListener("pointerenter", () => {
     clearTimeout(timer);
-    remaining -= Date.now() - startedAt;
+    remaining -= Date.now() - started;
   });
   el.addEventListener("pointerleave", arm);
-  $(".toast__close", el).addEventListener("click", () => dismiss(true));
+  $(".toast__x", el).addEventListener("click", () => dismiss(true));
   if (action) {
     $(".toast__action", el).addEventListener("click", () => {
       settled = true;
       clearTimeout(timer);
       el.classList.add("is-leaving");
-      setTimeout(() => el.remove(), reduceMotion ? 0 : 360);
+      setTimeout(() => el.remove(), reduceMotion ? 0 : 150);
       action.run();
     });
   }
   arm();
 }
 
-/* =========================================================
-   Interactions globales
-   ========================================================= */
-
-document.addEventListener(
-  "pointerdown",
-  (e) => {
-    keyboardMode = false;
-    lastPointer = { x: e.clientX, y: e.clientY };
-  },
-  { capture: true, passive: true }
-);
+/* Interactions */
 
 document.addEventListener("click", async (e) => {
   const t = e.target.closest(
-    "[data-open],[data-edit],[data-delete],[data-close],[data-retry],[data-explore-sort],[data-sort],[data-page],[data-copy],[data-new],[data-clear-search],[data-shuffle],[data-dir],.card[data-id]"
+    "[data-close],[data-cancel],[data-new],[data-shuffle],[data-retry],[data-sort],[data-page],[data-clear],[data-copy],[data-delete],[data-edit],[data-open],[data-id]"
   );
   if (!t) return;
 
-  if (t.matches("[data-dir]")) {
-    const track = t.parentElement.querySelector("[data-track]");
-    track.scrollBy({ left: Number(t.dataset.dir) * track.clientWidth * 0.85, behavior: smooth() });
-  } else if (t.matches("[data-close]")) {
+  if (t.matches("[data-close]")) {
     requestClose();
+  } else if (t.matches("[data-cancel]")) {
+    if (modal.dirty && Date.now() > modal.closeArmed) {
+      modal.closeArmed = Date.now() + 3500;
+      toast({ msg: "Modifications non enregistrées. Fermez encore une fois pour les abandonner.", type: "error", duration: 3500 });
+      return;
+    }
+    const doc = cache.get(t.dataset.cancel);
+    if (doc) openModal(renderDetail(doc));
+    else closeModal();
   } else if (t.matches("[data-new]")) {
     openModal(renderForm());
   } else if (t.matches("[data-shuffle]")) {
-    shuffleHero();
+    shuffleFeatured();
   } else if (t.matches("[data-retry]")) {
-    t.closest("[data-reloadable]")?._reload?.();
-  } else if (t.matches("[data-explore-sort]")) {
-    explore.setSort(t.dataset.exploreSort);
-    $("#explore").scrollIntoView({ behavior: smooth(), block: "start" });
+    if (t.dataset.retry === "une") loadFeatured();
+    else loadList();
   } else if (t.matches("[data-sort]")) {
-    explore.setSort(t.dataset.sort);
+    setSort(t.dataset.sort);
   } else if (t.matches("[data-page]")) {
-    explore.go(Number(t.dataset.page));
-  } else if (t.matches("[data-clear-search]")) {
-    $("#searchInput").value = "";
-    explore.search("");
+    goPage(Number(t.dataset.page));
+  } else if (t.matches("[data-clear]")) {
+    clearSearch();
   } else if (t.matches("[data-copy]")) {
     try {
       await navigator.clipboard.writeText(JSON.stringify(cache.get(t.dataset.copy), null, 2));
-      toast({ msg: "Document copié dans le presse-papiers." });
+      toast({ msg: "Document copié." });
     } catch {
       toast({ msg: "Copie impossible dans ce navigateur.", type: "error" });
     }
   } else if (t.matches("[data-delete]")) {
     scheduleDelete(t.dataset.delete);
   } else {
-    const id = t.dataset.open ?? t.dataset.edit ?? t.dataset.id;
-    let doc = cache.get(id);
-    if (!doc) {
-      try {
-        doc = await api.get(id);
-        cache.set(id, doc);
-      } catch (err) {
-        toast({ msg: err.message, type: "error" });
-        return;
-      }
+    const id = t.dataset.open || t.dataset.edit || t.dataset.id;
+    try {
+      const doc = await ensureDoc(id);
+      openModal(t.matches("[data-edit]") ? renderForm(doc) : renderDetail(doc));
+    } catch (err) {
+      toast({ msg: err.message, type: "error" });
     }
-    openModal(t.matches("[data-edit]") ? renderForm(doc) : renderDetail(doc));
   }
 });
 
 document.addEventListener("keydown", (e) => {
-  keyboardMode = true;
-  const modalOpen = !$("#modal").hidden;
-  if (modalOpen) {
+  const open = !$("#modal").hidden;
+  if (open) {
     if (e.key === "Escape") {
       e.preventDefault();
       requestClose();
@@ -1507,203 +1075,25 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-document.addEventListener(
-  "scroll",
-  (e) => {
-    if (e.target instanceof Element && e.target.matches("[data-track]")) updateArrows(e.target);
-  },
-  { capture: true, passive: true }
+$("#clearSearch").addEventListener("click", clearSearch);
+
+$("#searchInput").addEventListener(
+  "input",
+  debounce((e) => search(e.target.value), 280)
 );
 
-document.addEventListener("pointerover", (e) => {
-  const card = e.target.closest?.(".card[data-id]");
-  if (card && !card.contains(e.relatedTarget)) scramble($("[data-scramble]", card));
-});
-
-/* Projecteur + boutons magnétiques + lueur du curseur */
-function setupPointerFx() {
-  if (!finePointer) return;
-  const glow = $("#cursorGlow");
-  let magnet = null;
-  let gx = innerWidth / 2;
-  let gy = innerHeight / 3;
-  let tx = gx;
-  let ty = gy;
-  let glowRaf = null;
-
-  const glowLoop = () => {
-    gx += (tx - gx) * 0.12;
-    gy += (ty - gy) * 0.12;
-    glow.style.transform = `translate3d(${gx}px, ${gy}px, 0)`;
-    glowRaf = Math.abs(tx - gx) + Math.abs(ty - gy) > 0.5 ? requestAnimationFrame(glowLoop) : null;
-  };
-
-  let magnetBase = null;
-  const releaseMagnet = () => {
-    if (!magnet) return;
-    magnet.style.transform = "";
-    magnet = null;
-    magnetBase = null;
-  };
-  addEventListener("scroll", releaseMagnet, { passive: true });
-
-  document.addEventListener(
-    "pointermove",
-    (e) => {
-      if (e.pointerType !== "mouse") return;
-
-      const spot = e.target.closest?.(".card, .btn, .tile, .pager button, .picker");
-      if (spot) {
-        const r = spot.getBoundingClientRect();
-        spot.style.setProperty("--mx", `${e.clientX - r.left}px`);
-        spot.style.setProperty("--my", `${e.clientY - r.top}px`);
-      }
-
-      if (!reduceMotion) {
-        const mag = e.target.closest?.(".magnetic");
-        if (mag !== magnet) releaseMagnet();
-        if (mag) {
-          if (mag !== magnet) {
-            magnet = mag;
-            const r = mag.getBoundingClientRect();
-            magnetBase = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-          }
-          const mx = (e.clientX - magnetBase.x) * 0.22;
-          const my = (e.clientY - magnetBase.y) * 0.32;
-          mag.style.transform = `translate(${mx}px, ${my}px)`;
-        }
-
-        tx = e.clientX;
-        ty = e.clientY;
-        glow.classList.add("is-on");
-        if (!glowRaf) glowRaf = requestAnimationFrame(glowLoop);
-      }
-    },
-    { passive: true }
-  );
-
-  document.addEventListener("pointerout", (e) => {
-    if (magnet && !magnet.contains(e.relatedTarget)) releaseMagnet();
-    if (!e.relatedTarget) glow.classList.remove("is-on");
-  });
-}
-
-/* Navigation : fond au scroll, pilule de survol, section active */
-function setupNav() {
-  const nav = $("#nav");
-  const links = $("#navLinks");
-  const pill = $(".nav__pill", links);
-  const wrap = $("#heroGlobeWrap");
-  let active = null;
-  let ticking = false;
-
-  addEventListener(
-    "scroll",
-    () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        nav.classList.toggle("is-solid", scrollY > 24);
-        if (!reduceMotion) wrap.style.setProperty("--sy", `${Math.min(scrollY, 1000) * 0.3}px`);
-      });
-    },
-    { passive: true }
-  );
-
-  $$("a", links).forEach((a) => a.addEventListener("pointerenter", () => movePill(pill, a)));
-  links.addEventListener("pointerleave", () => movePill(pill, active));
-
-  const sections = ["top", "top10", "rows", "explore"].map((id) => document.getElementById(id)).filter(Boolean);
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        $$("a", links).forEach((a) => a.removeAttribute("aria-current"));
-        active = $(`a[data-section="${entry.target.id}"]`, links);
-        active?.setAttribute("aria-current", "true");
-        if (!links.matches(":hover")) movePill(pill, active);
-      });
-    },
-    { rootMargin: "-45% 0px -50% 0px" }
-  );
-  sections.forEach((s) => io.observe(s));
-}
-
-const revealIO = new IntersectionObserver(
-  (entries) =>
+const spy = new IntersectionObserver(
+  (entries) => {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
-      entry.target.classList.add("is-in");
-      revealIO.unobserve(entry.target);
-    }),
-  { rootMargin: "0px 0px -8% 0px" }
+      $$(".nav a").forEach((a) => a.removeAttribute("aria-current"));
+      $(`.nav a[href="#${entry.target.id}"]`)?.setAttribute("aria-current", "page");
+    });
+  },
+  { rootMargin: "-40% 0px -50% 0px" }
 );
+["une", "releves"].forEach((id) => spy.observe(document.getElementById(id)));
 
-function intro() {
-  const el = $("#intro");
-  if (reduceMotion || sessionStorage.getItem("mongoflix-intro")) {
-    el.remove();
-    return;
-  }
-  sessionStorage.setItem("mongoflix-intro", "1");
-  document.documentElement.classList.add("is-intro");
-  const done = () => {
-    el.classList.add("is-done");
-    document.documentElement.classList.remove("is-intro");
-    setTimeout(() => el.remove(), 800);
-  };
-  const timer = setTimeout(done, 2300);
-  el.addEventListener(
-    "click",
-    () => {
-      clearTimeout(timer);
-      done();
-    },
-    { once: true }
-  );
-}
-
-/* =========================================================
-   Démarrage
-   ========================================================= */
-
-async function init() {
-  intro();
-  $$("[data-roll]").forEach((el) => (el.outerHTML = roll(el.textContent.trim())));
-
-  heroGlobe = new Globe($("#heroGlobe"), { interactive: true, dots: 1800, radius: 0.4 });
-
-  $("#rows").innerHTML = ROWS.map(rowShell).join("");
-  $$(".reveal, .reveal-group").forEach((el) => revealIO.observe(el));
-
-  setupPointerFx();
-  setupNav();
-  explore.renderSeg();
-  document.fonts?.ready.then(() => explore.renderSeg());
-  addEventListener("resize", debounce(() => explore.renderSeg(), 150));
-
-  const onSearch = debounce((value) => {
-    explore.search(value);
-    const rect = $("#explore").getBoundingClientRect();
-    if (value.trim() && (rect.top > innerHeight * 0.6 || rect.bottom < 0)) {
-      $("#explore").scrollIntoView({ behavior: smooth(), block: "start" });
-    }
-  }, 320);
-  $("#searchInput").addEventListener("input", (e) => onSearch(e.target.value));
-
-  const top = loadRow($("#top10Track"), "-temp", { limit: 10, poster: true });
-  ROWS.forEach((r) => loadRow($(`#row-${r.id} [data-track]`), r.sort));
-  explore.load();
-
-  const hot = await top;
-  if (hot.length) {
-    renderHero(hot[(Math.random() * Math.min(hot.length, 5)) | 0]);
-  } else {
-    $("#hero").innerHTML = errorBlock("Le relevé à la une n'a pas pu être chargé. Vérifiez la connexion à MongoDB.");
-    $("#hero")._reload = () => location.reload();
-    $("#hero").setAttribute("data-reloadable", "");
-  }
-}
-
-init();
+$("#grid").innerHTML = skeletons();
+loadFeatured();
+loadList();

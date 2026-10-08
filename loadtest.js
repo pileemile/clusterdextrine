@@ -3,29 +3,29 @@ import { check, sleep, group } from "k6";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:3000";
 
-// Chaque route a son taux d'erreur, sa latence p(95) et son check.
-// La CI échoue dès qu'un de ces seuils est dépassé, et le récap les liste un par un.
-const ERROR_RATE = "rate<0.05";
-const P95 = "p(95)<2000";
-const CHECK_RATE = "rate>0.95";
+// Seuils calés sur le run CI (20 VUs, 20 s) : p(95) global 31 ms, p(99) 63 ms,
+// GET /weather 60 ms, les écritures autour de 25 ms.
+// En dessous de la mesure, le job devient rouge et la ligne apparaît dans « Seuils non tenus ».
+const ERROR_RATE = "rate<0.01";
+const CHECK_RATE = "rate>0.99";
 
 const routes = [
-  { name: "GET /weather", check: "GET /weather 200" },
-  { name: "POST /weather", check: "POST /weather 201" },
-  { name: "GET /weather/:id", check: "GET /weather/:id 200" },
-  { name: "PUT /weather/:id", check: "PUT /weather/:id 200" },
-  { name: "DELETE /weather/:id", check: "DELETE /weather/:id 200" },
+  { name: "GET /weather", check: "GET /weather 200", p95: "p(95)<40" },
+  { name: "POST /weather", check: "POST /weather 201", p95: "p(95)<80" },
+  { name: "GET /weather/:id", check: "GET /weather/:id 200", p95: "p(95)<80" },
+  { name: "PUT /weather/:id", check: "PUT /weather/:id 200", p95: "p(95)<80" },
+  { name: "DELETE /weather/:id", check: "DELETE /weather/:id 200", p95: "p(95)<80" },
 ];
 
 const thresholds = {
   http_req_failed: [ERROR_RATE],
-  http_req_duration: [P95, "p(99)<4000"],
+  http_req_duration: ["p(95)<50", "p(99)<40"],
   checks: [CHECK_RATE],
 };
 
 for (const route of routes) {
   thresholds[`http_req_failed{name:${route.name}}`] = [ERROR_RATE];
-  thresholds[`http_req_duration{name:${route.name}}`] = [P95];
+  thresholds[`http_req_duration{name:${route.name}}`] = [route.p95];
   thresholds[`checks{check:${route.check}}`] = [CHECK_RATE];
 }
 

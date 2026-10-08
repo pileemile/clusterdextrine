@@ -27,6 +27,8 @@ jobs:
       MONGODB_URI: mongodb://127.0.0.1:27017/sample_weatherdata
       PORT: 3000
       BASE_URL: http://127.0.0.1:3000
+      VUS: "20"
+      DURATION: "20s"
 
     steps:
       - name: Checkout
@@ -66,9 +68,6 @@ jobs:
           sudo apt-get install -y k6
 
       - name: Run load test
-        env:
-          VUS: "20"
-          DURATION: "20s"
         run: k6 run --summary-export=summary.json loadtest.js
 
       - name: Publish summary

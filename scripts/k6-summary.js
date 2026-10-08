@@ -232,3 +232,5 @@ if (out) {
 } else {
   console.log(md);
 }
+
+if (failed.length) process.exit(1);

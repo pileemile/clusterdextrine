@@ -10,7 +10,8 @@ const abRoutes = require("./routes/abRoutes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Le front est servi par ce même process : aucune origine tierce.
+app.use(cors({ origin: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 

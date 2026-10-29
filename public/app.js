@@ -653,12 +653,18 @@ async function loadFeatured() {
   }
 }
 
+function randomBelow(max) {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % max;
+}
+
 async function shuffleFeatured() {
   const token = ++featureToken;
   let pool = [...cache.values()].filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
   if (!pool.length) {
     try {
-      const { data } = await api.list({ sort: "-ts", limit: 24, page: 1 + ((Math.random() * 4) | 0) });
+      const { data } = await api.list({ sort: "-ts", limit: 24, page: 1 + randomBelow(4) });
       if (token !== featureToken) return;
       remember(data);
       pool = data.filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
@@ -673,7 +679,7 @@ async function shuffleFeatured() {
     toast({ msg: "Pas d'autre relevé à afficher." });
     return;
   }
-  renderFeatured(pool[(Math.random() * pool.length) | 0]);
+  renderFeatured(pool[randomBelow(pool.length)]);
 }
 
 function setSort(sort) {

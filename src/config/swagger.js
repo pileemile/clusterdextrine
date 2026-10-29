@@ -9,7 +9,10 @@ const spec = {
     version: "1.0.0",
   },
   servers: [{ url: "http://localhost:3000", description: "Local" }],
-  tags: [{ name: "weather", description: "Rapports météo" }],
+  tags: [
+    { name: "weather", description: "Rapports météo" },
+    { name: "ab", description: "Test A/B du libellé « Nouveau relevé »" },
+  ],
   paths: {
     "/api/weather": {
       get: {
@@ -37,6 +40,24 @@ const spec = {
             in: "query",
             description: "Recherche partielle (insensible à la casse) sur `st` et `callLetters`",
             schema: { type: "string", example: "VCSZ" },
+          },
+          {
+            name: "lat",
+            in: "query",
+            description: "Latitude d'une ville. Avec lng, limite aux relevés proches.",
+            schema: { type: "number", example: 52.37 },
+          },
+          {
+            name: "lng",
+            in: "query",
+            description: "Longitude d'une ville. Avec lat, limite aux relevés proches.",
+            schema: { type: "number", example: 4.9 },
+          },
+          {
+            name: "km",
+            in: "query",
+            description: "Rayon en kilomètres autour de lat/lng. Défaut 400, maximum 800.",
+            schema: { type: "number", default: 400 },
           },
           {
             name: "sort",
@@ -103,7 +124,24 @@ const spec = {
               },
             },
           },
+          409: {
+            description: "Un relevé existe déjà pour cette station et cette heure. Aucune conversion n'est comptée.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+              },
+            },
+          },
         },
+        parameters: [
+          {
+            name: "X-AB-Measure",
+            in: "header",
+            required: false,
+            description: "Présent (1) seulement si le visiteur est dans l'expérience. N'autorise pas à choisir A ou B.",
+            schema: { type: "string", example: "1" },
+          },
+        ],
       },
     },
     "/api/weather/{id}": {
@@ -226,6 +264,37 @@ const spec = {
                 schema: { $ref: "#/components/schemas/Error" },
               },
             },
+          },
+        },
+      },
+    },
+    "/api/ab/assignment": {
+      get: {
+        tags: ["ab"],
+        summary: "Affecter une variante stable (cookie ab_visitor)",
+        responses: {
+          200: {
+            description: "Variante A ou B. Cache-Control: no-store. Expérience arrêtée : A, sans nouvelle affectation.",
+          },
+        },
+      },
+    },
+    "/api/ab/exposure": {
+      post: {
+        tags: ["ab"],
+        summary: "Déclarer la première exposition du visiteur",
+        responses: {
+          204: { description: "Enregistrée, ou déjà enregistrée sans changer la date" },
+        },
+      },
+    },
+    "/api/ab/metrics": {
+      get: {
+        tags: ["ab"],
+        summary: "Effectifs et taux par variante",
+        responses: {
+          200: {
+            description: "assigned, exposed, converted, bookings. rate vaut null si exposed est 0.",
           },
         },
       },

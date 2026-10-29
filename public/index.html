@@ -35,6 +35,7 @@
         <nav class="nav" aria-label="Sections">
           <a href="#une" aria-current="page">À la une</a>
           <a href="#releves">Relevés</a>
+          <a href="/lieux.html">Mes lieux</a>
         </nav>
 
         <p class="sse" id="sseStatus" role="status" data-state="connecting" aria-live="polite">
@@ -43,19 +44,20 @@
         </p>
 
         <div class="header__actions">
-          <label class="search">
+          <label class="search" for="searchInput">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
             </svg>
-            <input id="searchInput" type="search" placeholder="Station ou indicatif" autocomplete="off" spellcheck="false" aria-label="Rechercher une station ou un indicatif" />
+            <input id="searchInput" type="search" placeholder="Station ou indicatif" autocomplete="off" spellcheck="false" maxlength="60" aria-label="Rechercher une station ou un indicatif" aria-describedby="browseSub" />
           </label>
-          <button class="btn btn--primary" type="button" data-new>
+          <button class="btn" type="button" id="searchBtn">Rechercher</button>
+          <button class="btn btn--primary" type="button" data-new data-ab data-ready="false" aria-busy="true" aria-label="Chargement de l'action">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14" />
               <path d="M12 5v14" />
             </svg>
-            <span>Nouveau relevé</span>
+            <span class="btn__label" id="abLabel" data-ab-label></span>
           </button>
         </div>
       </div>
@@ -100,6 +102,7 @@
           <button class="btn" type="button" data-sort="pressure" aria-pressed="false">Basse pression</button>
         </div>
 
+        <div class="outbox" id="outbox" hidden></div>
         <div class="grid" id="grid" aria-busy="true"></div>
         <nav class="pager" id="pager" aria-label="Pagination"></nav>
       </section>
@@ -110,6 +113,7 @@
         <p class="footer__name">Ciel</p>
         <p>Relevés de la collection sample_weatherdata.</p>
         <p class="footer__links">
+          <a href="/lieux.html">Mes lieux</a>
           <a href="/api-docs">Documentation API</a>
           <span>Recherche avec /</span>
           <span>Nouveau relevé avec N</span>
@@ -131,6 +135,7 @@
     </div>
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
+    <script src="/places.js" defer></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

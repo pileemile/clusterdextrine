@@ -297,6 +297,21 @@ svg {
   border-color: var(--sky-deep);
 }
 
+.btn--primary:focus-visible {
+  outline-color: var(--ink);
+}
+
+.btn--primary[data-ab] .btn__label {
+  min-width: 9.2em;
+  text-align: start;
+}
+
+.btn--primary[data-ab][data-ready="false"] .btn__label {
+  height: 0.7em;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
 .btn--icon {
   width: var(--control);
   padding: 0;
@@ -573,6 +588,20 @@ main {
   margin: 16px 0;
 }
 
+.outbox {
+  margin-bottom: 20px;
+}
+
+.outbox[hidden] {
+  display: none;
+}
+
+.outbox__status {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -595,6 +624,68 @@ main {
 
 .card:hover {
   background: var(--wash);
+}
+
+.card--wait {
+  cursor: default;
+  border-style: dashed;
+}
+
+.card--wait:hover {
+  background: var(--paper);
+}
+
+.card--wait .btn,
+.card--place .btn {
+  margin-top: 16px;
+}
+
+.place-form {
+  margin-bottom: 28px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.place-form h2 {
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.place-form .section__sub {
+  margin-bottom: 16px;
+}
+
+.city-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.city-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.city-weather {
+  margin-top: 16px;
+}
+
+.city-weather h3 {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+a.card {
+  text-decoration: none;
+}
+
+.tag--wait {
+  color: var(--ink);
 }
 
 .card__top {
@@ -1015,7 +1106,8 @@ main {
   color: var(--sky);
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   height: var(--control);
   padding: 0 12px;

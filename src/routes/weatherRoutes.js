@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const Weather = require("../models/Weather");
 const { subscribe, changed } = require("../sse/weatherEvents");
+const { attributeBooking, readVisitorId, wantsMeasure } = require("../services/abService");
 
 const router = express.Router();
 
@@ -24,6 +25,17 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function labDelayMs(q) {
+  // Profil lab : ralentit certaines recherches pour tester abort + génération.
+  if (q.length === 2) return 1200;
+  if (q.length === 3) return 100;
+  return 180;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Liste (pagination, filtre st exact, recherche q, tri)
 router.get("/", async (req, res) => {
   try {
@@ -36,10 +48,38 @@ router.get("/", async (req, res) => {
       filter.st = req.query.st;
     }
 
-    const q = String(req.query.q ?? "").trim();
+    const qRaw = req.query.q;
+    const q = qRaw === undefined || qRaw === null ? "" : String(qRaw).trim();
+
+    // Validation serveur quand q est fourni (contrat TP recherche réactive)
+    if (qRaw !== undefined && qRaw !== null && qRaw !== "") {
+      if (q.length < 2) {
+        return res.status(400).json({ error: "Le paramètre q doit contenir au moins 2 caractères." });
+      }
+      if (q.length > 60) {
+        return res.status(400).json({ error: "Le paramètre q ne doit pas dépasser 60 caractères." });
+      }
+      if (q.toLowerCase() === "erreur") {
+        await sleep(180);
+        return res.status(503).json({ error: "Service temporairement indisponible (simulation lab)." });
+      }
+      await sleep(labDelayMs(q));
+    }
+
     if (q) {
       const rx = new RegExp(escapeRegex(q), "i");
       filter.$or = [{ st: rx }, { callLetters: rx }];
+    }
+
+    const nearLat = Number(req.query.lat);
+    const nearLng = Number(req.query.lng);
+    if (req.query.lat !== undefined && req.query.lng !== undefined && Number.isFinite(nearLat) && Number.isFinite(nearLng)) {
+      const km = Math.min(800, Math.max(20, Number(req.query.km) || 400));
+      const dLat = km / 111;
+      const cos = Math.cos((nearLat * Math.PI) / 180);
+      const dLng = km / (111 * Math.max(0.2, Math.abs(cos)));
+      filter["position.coordinates.1"] = { $gte: nearLat - dLat, $lte: nearLat + dLat };
+      filter["position.coordinates.0"] = { $gte: nearLng - dLng, $lte: nearLng + dLng };
     }
 
     let sort = { _id: 1 };
@@ -66,6 +106,7 @@ router.get("/", async (req, res) => {
       limit,
       total,
       pages: Math.ceil(total / limit),
+      query: q || undefined,
       data: items,
     });
   } catch (err) {
@@ -97,8 +138,26 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
+    const st = req.body?.st;
+    const ts = req.body?.ts ? new Date(req.body.ts) : null;
+    if (st && ts && !Number.isNaN(ts.getTime())) {
+      const taken = await Weather.exists({ st, ts });
+      if (taken) {
+        return res.status(409).json({ error: "Ce relevé existe déjà pour cette station et cette heure." });
+      }
+    }
+
     const created = await Weather.create(req.body);
     changed({ id: created._id, action: "created" });
+
+    if (wantsMeasure(req)) {
+      try {
+        await attributeBooking(readVisitorId(req));
+      } catch (err) {
+        console.error("Attribution A/B ignorée:", err.message);
+      }
+    }
+
     res.status(201).json(created);
   } catch (err) {
     res.status(400).json({ error: err.message });

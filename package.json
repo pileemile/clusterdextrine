@@ -6,7 +6,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js",
-    "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js"
+    "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
+    "test": "node --test",
+    "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js"
   },
   "keywords": [],
   "author": "",

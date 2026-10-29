@@ -150,11 +150,16 @@ function relativeHumidity(t, dew) {
   return clamp((100 * f(dew)) / f(t), 0, 100);
 }
 
-async function request(url, { method = "GET", body, keepalive } = {}) {
+async function request(url, { method = "GET", body, keepalive, signal, measure } = {}) {
+  const headers = {};
+  if (body) headers["Content-Type"] = "application/json";
+  if (measure) headers["X-AB-Measure"] = "1";
   const res = await fetch(url, {
     method,
     keepalive,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    signal,
+    credentials: "same-origin",
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
@@ -163,15 +168,119 @@ async function request(url, { method = "GET", body, keepalive } = {}) {
 }
 
 const api = {
-  list(params = {}) {
+  list(params = {}, { signal } = {}) {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
-    return request(`/api/weather?${qs}`);
+    return request(`/api/weather?${qs}`, { signal });
   },
   get: (id) => request(`/api/weather/${encodeURIComponent(id)}`),
-  create: (body) => request("/api/weather", { method: "POST", body }),
+  create: (body, opts) => request("/api/weather", { method: "POST", body, measure: Boolean(opts?.measure) }),
   update: (id, body) => request(`/api/weather/${encodeURIComponent(id)}`, { method: "PUT", body }),
   remove: (id, opts) => request(`/api/weather/${encodeURIComponent(id)}`, { method: "DELETE", ...opts }),
 };
+
+const OUTBOX_KEY = "ciel-outbox";
+let outboxFlushing = false;
+
+function readOutbox() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "[]");
+    return Array.isArray(raw) ? raw.filter((item) => item && item.id && item.payload) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOutbox(items) {
+  localStorage.setItem(OUTBOX_KEY, JSON.stringify(items));
+  renderOutbox();
+}
+
+function isNetworkFailure(err) {
+  if (!navigator.onLine) return true;
+  if (err instanceof TypeError) return true;
+  const msg = String(err?.message || "");
+  return /failed to fetch|networkerror|load failed|connexion réseau/i.test(msg);
+}
+
+function queueReading(payload) {
+  const items = readOutbox();
+  items.push({
+    id: crypto.randomUUID(),
+    payload,
+    measure: ab.counted,
+    createdAt: new Date().toISOString(),
+  });
+  writeOutbox(items);
+}
+
+function removeOutbox(id) {
+  writeOutbox(readOutbox().filter((item) => item.id !== id));
+}
+
+function outboxCard(item) {
+  const payload = item.payload;
+  const temp = measured(payload.airTemperature?.value, MISSING.temp);
+  const call = payload.callLetters || "Sans indicatif";
+  const ts = payload.ts ? new Date(payload.ts) : null;
+  return `<article class="card card--wait">
+    <span class="card__top">
+      <span class="tag tag--wait">En attente</span>
+      <span class="card__date">${esc(fmtDate(ts, true))}</span>
+    </span>
+    <span class="card__call">${esc(call)}</span>
+    <span class="card__temp${temp == null ? " card__temp--na" : ""}">${temp == null ? "Non mesuré" : esc(fmtTemp(temp))}</span>
+    <span class="card__meta"><span>${esc(payload.st || "Station inconnue")}</span></span>
+    <button class="btn" type="button" data-outbox-remove="${esc(item.id)}">Retirer</button>
+  </article>`;
+}
+
+function renderOutbox() {
+  const root = $("#outbox");
+  if (!root) return;
+  const items = readOutbox();
+  const offline = !navigator.onLine;
+  if (!items.length && !offline) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  const title = offline
+    ? items.length
+      ? `Hors ligne. ${fmtInt(items.length)} relevé${items.length > 1 ? "s" : ""} gardé${items.length > 1 ? "s" : ""} sur cet appareil.`
+      : "Hors ligne. Un nouveau relevé sera gardé ici, puis envoyé au retour du réseau."
+    : `${fmtInt(items.length)} relevé${items.length > 1 ? "s" : ""} en attente d'envoi.`;
+  root.hidden = false;
+  root.innerHTML = `<p class="outbox__status" role="status">${esc(title)}</p>${
+    items.length ? `<div class="grid">${items.map(outboxCard).join("")}</div>` : ""
+  }`;
+}
+
+async function flushOutbox() {
+  if (outboxFlushing || !navigator.onLine || !readOutbox().length) return;
+  outboxFlushing = true;
+  let sent = 0;
+  try {
+    for (const item of readOutbox()) {
+      if (!readOutbox().some((row) => row.id === item.id)) continue;
+      try {
+        await api.create(item.payload, { measure: item.measure });
+        removeOutbox(item.id);
+        sent += 1;
+      } catch (err) {
+        if (isNetworkFailure(err)) break;
+        removeOutbox(item.id);
+        toast({ msg: err.message || "Un relevé en attente a été refusé.", type: "error" });
+      }
+    }
+  } finally {
+    outboxFlushing = false;
+    renderOutbox();
+  }
+  if (sent) {
+    toast({ msg: sent > 1 ? `${fmtInt(sent)} relevés envoyés.` : "Relevé envoyé." });
+    loadList();
+  }
+}
 
 const cache = new Map();
 const pending = new Set();
@@ -184,9 +293,81 @@ const state = {
   pages: 1,
   featuredId: null,
   docs: [],
+  /** idle | waiting | loading | results | empty | error | short */
+  searchUi: "idle",
+  error: "",
+  displayedQuery: "",
 };
-let listReq = 0;
+/** Identifiant de génération : incrémenté à chaque nouvelle saisie / programmation. */
+let listGen = 0;
+/** AbortController de la requête liste active. */
+let listAbort = null;
+/** Minuteur de debounce (300 ms). */
+let debounceTimer = 0;
 let featureToken = 0;
+const DEBOUNCE_MS = 300;
+const Q_MIN = 2;
+const Q_MAX = 60;
+
+/** Seul le libellé change. A est la référence, B la modification. */
+const AB_LABELS = { A: "Nouveau relevé", B: "Ajouter un relevé" };
+const ab = { variant: null, counted: false };
+let exposureSent = false;
+
+function abLabelText() {
+  if (ab.variant === "B") return AB_LABELS.B;
+  if (ab.variant === "A") return AB_LABELS.A;
+  return "";
+}
+
+function applyAbLabel() {
+  const text = abLabelText();
+  document.querySelectorAll("[data-ab-label]").forEach((el) => {
+    el.textContent = text;
+  });
+  const btn = document.querySelector("[data-ab]");
+  if (!btn) return;
+  const ready = ab.variant === "A" || ab.variant === "B";
+  btn.dataset.ready = ready ? "true" : "false";
+  btn.setAttribute("aria-busy", ready ? "false" : "true");
+  if (ready) btn.removeAttribute("aria-label");
+  else btn.setAttribute("aria-label", "Chargement de l'action");
+}
+
+function exposeIfAvailable() {
+  if (!ab.counted || exposureSent) return;
+  if (!document.querySelector("[data-new]")) return;
+  requestAnimationFrame(() => {
+    if (!ab.counted || exposureSent) return;
+    if (!document.querySelector("[data-new]")) return;
+    exposureSent = true;
+    fetch("/api/ab/exposure", { method: "POST", credentials: "same-origin" }).catch(() => {});
+  });
+}
+
+async function loadAssignment() {
+  try {
+    const res = await fetch("/api/ab/assignment", {
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: AbortSignal.timeout(800),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (body.enabled === false) {
+      ab.variant = "A";
+      ab.counted = false;
+    } else {
+      ab.variant = body.variant === "B" ? "B" : "A";
+      ab.counted = true;
+    }
+  } catch {
+    ab.variant = "A";
+    ab.counted = false;
+  }
+  applyAbLabel();
+  exposeIfAvailable();
+}
 
 const modal = { mode: null, docId: null, dirty: false, opener: null, timer: 0, closeArmed: 0 };
 
@@ -213,6 +394,14 @@ function stat(label, ico, value, unit, digits, sub = "") {
   </div>`;
 }
 
+function placeButton(s) {
+  if (s.lat == null || s.lng == null) return "";
+  if (CielPlaces.find({ name: s.callLabel, st: s.st, lat: s.lat, lng: s.lng })) {
+    return `<a class="btn" href="/lieux.html">${icon.pin}<span>Dans Mes lieux</span></a>`;
+  }
+  return `<button class="btn" type="button" data-save-place="${esc(s.id)}">${icon.pin}<span>Enregistrer le lieu</span></button>`;
+}
+
 function renderFeatured(doc) {
   const s = summarize(doc);
   state.featuredId = s.id;
@@ -233,6 +422,7 @@ function renderFeatured(doc) {
         <div class="une__actions">
           <button class="btn btn--primary" type="button" data-open="${esc(s.id)}">${icon.eye}<span>Voir le relevé</span></button>
           <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          ${placeButton(s)}
           <button class="btn" type="button" data-shuffle>${icon.refresh}<span>Autre relevé</span></button>
         </div>
       </div>
@@ -313,20 +503,43 @@ function renderGrid() {
           title: "Aucun relevé",
           text: "La collection est vide.",
           ico: icon.cloud,
-          action: `<button class="btn btn--primary" type="button" data-new>${icon.plus}<span>Nouveau relevé</span></button>`,
+          action: `<button class="btn btn--primary" type="button" data-new>${icon.plus}<span data-ab-label>${esc(abLabelText())}</span></button>`,
         });
+    applyAbLabel();
     return;
   }
   grid.innerHTML = docs.map(cardHTML).join("");
+  applyAbLabel();
+}
+
+function statusText() {
+  switch (state.searchUi) {
+    case "short":
+      return "Saisissez au moins deux caractères pour lancer la recherche.";
+    case "waiting":
+      return "Recherche en attente…";
+    case "loading":
+      return state.displayedQuery
+        ? `Recherche de « ${state.displayedQuery} » en cours…`
+        : "Chargement des relevés…";
+    case "empty":
+      return `Aucun résultat pour « ${state.displayedQuery} ».`;
+    case "error":
+      return state.error || "Une erreur est survenue.";
+    case "results":
+      return state.displayedQuery
+        ? `${fmtInt(Math.max(0, state.total - pending.size))} ${state.total - pending.size === 1 ? "résultat" : "résultats"} pour « ${state.displayedQuery} »`
+        : `Page ${fmtInt(state.page)} sur ${fmtInt(state.pages)}`;
+    default:
+      return `Page ${fmtInt(state.page)} sur ${fmtInt(state.pages)}`;
+  }
 }
 
 function renderMeta() {
   const shown = Math.max(0, state.total - pending.size);
-  $("#browseCount").textContent = fmtInt(shown);
-  $("#browseSub").textContent = state.q
-    ? `${fmtInt(shown)} ${shown === 1 ? "résultat" : "résultats"} pour « ${state.q} »`
-    : `Page ${fmtInt(state.page)} sur ${fmtInt(state.pages)}`;
-  $("#clearSearch").hidden = !state.q;
+  $("#browseCount").textContent = state.searchUi === "results" || state.searchUi === "idle" ? fmtInt(shown) : "";
+  $("#browseSub").textContent = statusText();
+  $("#clearSearch").hidden = !state.q && !state.displayedQuery && state.searchUi !== "short" && state.searchUi !== "error";
 }
 
 function renderPager() {
@@ -352,23 +565,62 @@ function syncFilters() {
   $$("#filters [data-sort]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sort === state.sort)));
 }
 
-async function loadList() {
-  const id = ++listReq;
+function bumpListGen() {
+  return ++listGen;
+}
+
+function abortActiveList() {
+  if (listAbort) {
+    listAbort.abort();
+    listAbort = null;
+  }
+}
+
+function cancelDebounce() {
+  clearTimeout(debounceTimer);
+  debounceTimer = 0;
+}
+
+function applySearchUi(ui, { query = state.displayedQuery, error = "" } = {}) {
+  state.searchUi = ui;
+  state.displayedQuery = query;
+  state.error = error;
+}
+
+async function loadList({ gen = bumpListGen() } = {}) {
+  abortActiveList();
+  const controller = new AbortController();
+  listAbort = controller;
+
   const grid = $("#grid");
   grid.setAttribute("aria-busy", "true");
+  applySearchUi("loading", { query: state.q });
   grid.innerHTML = skeletons();
+  renderMeta();
+  $("#pager").innerHTML = "";
+
   try {
-    const res = await api.list({ page: state.page, limit: state.limit, sort: state.sort, q: state.q });
-    if (id !== listReq) return;
+    const res = await api.list(
+      { page: state.page, limit: state.limit, sort: state.sort, q: state.q },
+      { signal: controller.signal }
+    );
+    // Protection logique : une ancienne réponse ne modifie plus l'écran.
+    if (gen !== listGen) return;
     remember(res.data);
     state.docs = res.data;
     state.total = res.total;
     state.pages = Math.max(1, res.pages);
+    applySearchUi(res.data.length ? "results" : state.q ? "empty" : "idle", {
+      query: state.q,
+    });
     renderGrid();
     renderMeta();
     renderPager();
   } catch (err) {
-    if (id !== listReq) return;
+    // Annulation volontaire : pas de message d'échec.
+    if (err.name === "AbortError") return;
+    if (gen !== listGen) return;
+    applySearchUi("error", { query: state.q, error: err.message });
     grid.innerHTML = emptyBlock({
       title: "Impossible de charger les relevés",
       text: err.message,
@@ -377,8 +629,12 @@ async function loadList() {
       action: `<button class="btn" type="button" data-retry="list">${icon.refresh}<span>Réessayer</span></button>`,
     });
     $("#pager").innerHTML = "";
+    renderMeta();
   } finally {
-    if (id === listReq) grid.removeAttribute("aria-busy");
+    if (gen === listGen) {
+      if (listAbort === controller) listAbort = null;
+      grid.removeAttribute("aria-busy");
+    }
   }
 }
 
@@ -425,32 +681,84 @@ function setSort(sort) {
   state.sort = sort;
   state.page = 1;
   syncFilters();
+  cancelDebounce();
   loadList();
 }
 
 function goPage(page) {
   state.page = clamp(page, 1, state.pages);
+  cancelDebounce();
   loadList();
   $("#releves").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
 
-function search(q) {
-  const next = q.trim();
-  if (next === state.q) return;
-  state.q = next;
+/**
+ * Planifie une recherche réactive :
+ * - invalide la génération précédente dès la saisie
+ * - annule minuteur + requête actifs
+ * - debounce 300 ms (sauf immediate = bouton Rechercher / Réessayer)
+ */
+function scheduleSearch(raw, { immediate = false } = {}) {
+  const gen = bumpListGen();
+  abortActiveList();
+  cancelDebounce();
+
+  const next = String(raw ?? "").trim();
   state.page = 1;
-  loadList();
-  if (next) {
-    const rect = $("#releves").getBoundingClientRect();
-    if (rect.top > innerHeight * 0.4 || rect.bottom < 80) {
-      $("#releves").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-    }
+
+  if (!next) {
+    state.q = "";
+    applySearchUi("idle", { query: "" });
+    loadList({ gen });
+    return;
+  }
+
+  if (next.length < Q_MIN || next.length > Q_MAX) {
+    state.q = "";
+    state.docs = [];
+    state.total = 0;
+    state.pages = 1;
+    applySearchUi("short", { query: next });
+    $("#grid").innerHTML = emptyBlock({
+      title: "Saisie trop courte",
+      text: "Saisissez au moins deux caractères (60 maximum) pour lancer la recherche.",
+      ico: icon.search,
+    });
+    $("#pager").innerHTML = "";
+    renderMeta();
+    return;
+  }
+
+  applySearchUi("waiting", { query: next });
+  $("#grid").innerHTML = skeletons(6);
+  $("#pager").innerHTML = "";
+  renderMeta();
+
+  const run = () => {
+    debounceTimer = 0;
+    if (gen !== listGen) return;
+    state.q = next;
+    loadList({ gen });
+  };
+
+  if (immediate) run();
+  else debounceTimer = setTimeout(run, DEBOUNCE_MS);
+
+  const rect = $("#releves").getBoundingClientRect();
+  if (rect.top > innerHeight * 0.4 || rect.bottom < 80) {
+    $("#releves").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   }
 }
 
 function clearSearch() {
   $("#searchInput").value = "";
-  search("");
+  scheduleSearch("");
+}
+
+function cleanupReactiveSearch() {
+  cancelDebounce();
+  abortActiveList();
+  bumpListGen();
 }
 
 /* Fenêtre */
@@ -588,6 +896,7 @@ function renderDetail(doc) {
         </ul>
         <div class="detail__actions">
           <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          ${placeButton(s)}
           <button class="btn" type="button" data-delete="${esc(s.id)}">${icon.trash}<span>Supprimer</span></button>
         </div>
         <div class="measures">
@@ -858,9 +1167,22 @@ function renderForm(doc = null) {
       const btn = $('[type="submit"]', form);
       btn.classList.add("is-loading");
       btn.disabled = true;
+      const values = readForm(form);
+      const payload = isEdit ? null : toCreatePayload(values);
+      const parkOffline = () => {
+        queueReading(payload);
+        modal.dirty = false;
+        closeModal();
+        toast({ msg: "Hors ligne. Relevé gardé sur cet appareil. Il partira au retour du réseau." });
+      };
+      if (!isEdit && !navigator.onLine) {
+        parkOffline();
+        btn.classList.remove("is-loading");
+        btn.disabled = false;
+        return;
+      }
       try {
-        const values = readForm(form);
-        const saved = isEdit ? await api.update(s.id, toUpdatePayload(values)) : await api.create(toCreatePayload(values));
+        const saved = isEdit ? await api.update(s.id, toUpdatePayload(values)) : await api.create(payload, { measure: ab.counted });
         modal.dirty = false;
         if (isEdit) {
           replaceDoc(saved);
@@ -881,7 +1203,8 @@ function renderForm(doc = null) {
           loadList();
         }
       } catch (err) {
-        toast({ msg: err.message, type: "error" });
+        if (!isEdit && isNetworkFailure(err)) parkOffline();
+        else toast({ msg: err.message, type: "error" });
       } finally {
         btn.classList.remove("is-loading");
         btn.disabled = false;
@@ -1004,11 +1327,14 @@ function toast({ msg, type = "ok", mark, action, duration = 4200, onExpire }) {
 
 document.addEventListener("click", async (e) => {
   const t = e.target.closest(
-    "[data-close],[data-cancel],[data-new],[data-shuffle],[data-retry],[data-sort],[data-page],[data-clear],[data-copy],[data-delete],[data-edit],[data-open],[data-id]"
+    "[data-close],[data-cancel],[data-new],[data-shuffle],[data-retry],[data-sort],[data-page],[data-clear],[data-copy],[data-delete],[data-edit],[data-open],[data-id],[data-outbox-remove],[data-save-place]"
   );
   if (!t) return;
 
-  if (t.matches("[data-close]")) {
+  if (t.matches("[data-outbox-remove]")) {
+    removeOutbox(t.dataset.outboxRemove);
+    toast({ msg: "Relevé retiré de cet appareil." });
+  } else if (t.matches("[data-close]")) {
     requestClose();
   } else if (t.matches("[data-cancel]")) {
     if (modal.dirty && Date.now() > modal.closeArmed) {
@@ -1025,7 +1351,7 @@ document.addEventListener("click", async (e) => {
     shuffleFeatured();
   } else if (t.matches("[data-retry]")) {
     if (t.dataset.retry === "une") loadFeatured();
-    else loadList();
+    else scheduleSearch($("#searchInput").value, { immediate: true });
   } else if (t.matches("[data-sort]")) {
     setSort(t.dataset.sort);
   } else if (t.matches("[data-page]")) {
@@ -1041,6 +1367,22 @@ document.addEventListener("click", async (e) => {
     }
   } else if (t.matches("[data-delete]")) {
     scheduleDelete(t.dataset.delete);
+  } else if (t.matches("[data-save-place]")) {
+    try {
+      const doc = await ensureDoc(t.dataset.savePlace);
+      const s = summarize(doc);
+      if (s.lat == null || s.lng == null) {
+        toast({ msg: "Ce relevé n'a pas de position.", type: "error" });
+        return;
+      }
+      const result = CielPlaces.save({ name: s.callLabel, st: s.st, lat: s.lat, lng: s.lng });
+      const voir = { label: "Voir", run: () => { location.href = "/lieux.html"; } };
+      toast({ msg: result.created ? "Lieu enregistré." : "Ce lieu est déjà dans Mes lieux.", action: voir });
+      if (state.featuredId === s.id) renderFeatured(doc);
+      if (!$("#modal").hidden && modal.mode === "detail" && modal.docId === s.id) openModal(renderDetail(doc));
+    } catch (err) {
+      toast({ msg: err.message, type: "error" });
+    }
   } else {
     const id = t.dataset.open || t.dataset.edit || t.dataset.id;
     try {
@@ -1080,10 +1422,20 @@ document.addEventListener("keydown", (e) => {
 
 $("#clearSearch").addEventListener("click", clearSearch);
 
-$("#searchInput").addEventListener(
-  "input",
-  debounce((e) => search(e.target.value), 280)
-);
+$("#searchInput").addEventListener("input", (e) => {
+  scheduleSearch(e.target.value);
+});
+
+$("#searchBtn").addEventListener("click", () => {
+  scheduleSearch($("#searchInput").value, { immediate: true });
+});
+
+$("#searchInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    scheduleSearch(e.target.value, { immediate: true });
+  }
+});
 
 const spy = new IntersectionObserver(
   (entries) => {
@@ -1205,12 +1557,26 @@ function stopLive() {
   }
   clearInterval(pollTimer);
   pollTimer = null;
+  cleanupReactiveSearch();
 }
 
 addEventListener("pagehide", stopLive);
 
 $("#grid").innerHTML = skeletons();
+renderOutbox();
+const initialQuery = new URLSearchParams(location.search).get("q");
+if (initialQuery) {
+  $("#searchInput").value = initialQuery;
+  scheduleSearch(initialQuery, { immediate: true });
+}
 loadFeatured();
-loadList();
+if (!initialQuery) loadList();
+loadAssignment();
+addEventListener("online", () => {
+  renderOutbox();
+  flushOutbox();
+});
+addEventListener("offline", renderOutbox);
+flushOutbox();
 openLiveStream();
 startPolling();

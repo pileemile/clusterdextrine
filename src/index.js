@@ -5,6 +5,7 @@ const cors = require("cors");
 const { connectDB } = require("./config/db");
 const { setupSwagger } = require("./config/swagger");
 const weatherRoutes = require("./routes/weatherRoutes");
+const abRoutes = require("./routes/abRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,9 @@ app.get("/api", (_req, res) => {
       create: "POST /api/weather",
       update: "PUT /api/weather/:id",
       delete: "DELETE /api/weather/:id",
+      abAssignment: "GET /api/ab/assignment",
+      abExposure: "POST /api/ab/exposure",
+      abMetrics: "GET /api/ab/metrics",
     },
     swagger: {
       ui: "/api-docs",
@@ -33,6 +37,7 @@ app.get("/api", (_req, res) => {
 });
 
 setupSwagger(app);
+app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);
 
 connectDB()

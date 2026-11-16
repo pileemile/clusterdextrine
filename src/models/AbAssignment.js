@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { tenantPlugin } = require("../tenant/plugin");
 
 const abAssignmentSchema = new mongoose.Schema(
   {
@@ -19,6 +20,8 @@ const abAssignmentSchema = new mongoose.Schema(
   }
 );
 
-abAssignmentSchema.index({ experiment: 1, visitorId: 1 }, { unique: true });
+abAssignmentSchema.index({ tenantId: 1, experiment: 1, visitorId: 1 }, { unique: true });
+
+abAssignmentSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model("AbAssignment", abAssignmentSchema);

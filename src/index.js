@@ -10,6 +10,7 @@ const { setupSwagger } = require("./config/swagger");
 const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
+const { tenantMiddleware } = require("./tenant/middleware");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -73,6 +74,7 @@ app.get("/api", (_req, res) => {
 });
 
 setupSwagger(app);
+app.use("/api", tenantMiddleware);
 app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);
 

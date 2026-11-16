@@ -8,8 +8,9 @@
     "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js",
     "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
     "test": "node --test",
+    "e2e": "cypress run",
     "tracing:build": "esbuild otel-web/tracing-entry.js --bundle --format=iife --outfile=public/tracing.js --platform=browser",
-    "agenda:build": "npm --prefix agenda-web ci && agenda-web/node_modules/.bin/esbuild agenda-web/main.js --bundle --minify --format=iife --outfile=public/agenda.min.js --platform=browser --define:process.env.NODE_ENV=\\\"production\\\" --define:__VUE_OPTIONS_API__=true --define:__VUE_PROD_DEVTOOLS__=false --define:__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false",
+    "agenda:build": "npm --prefix agenda-web ci && agenda-web/node_modules/.bin/esbuild agenda-web/main.js --bundle --minify --format=iife --outfile=public/agenda.min.js --platform=browser --alias:vue=./agenda-web/node_modules/vue/dist/vue.esm-bundler.js --define:process.env.NODE_ENV=\\\"production\\\" --define:__VUE_OPTIONS_API__=true --define:__VUE_PROD_DEVTOOLS__=false --define:__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false",
     "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev"
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
+    "cypress": "^16.3.0",
     "dotenv": "^18.0.10",
     "prisma": "^7.10.1",
     "unpdf": "^1.7.0"

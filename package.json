@@ -8,6 +8,7 @@
     "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js",
     "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
     "test": "node --test",
+    "seed": "node scripts/seed-tenants.js",
     "tracing:build": "esbuild otel-web/tracing-entry.js --bundle --format=iife --outfile=public/tracing.js --platform=browser",
     "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js"
   },

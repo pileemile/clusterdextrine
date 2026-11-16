@@ -7,6 +7,7 @@ const weatherSchema = new mongoose.Schema(
     ts: Date,
     callLetters: String,
     type: String,
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: false },
   },
   {
     collection: "data",

@@ -5,14 +5,22 @@ export function toCalendarEvent(item) {
     start: item.start.dateTime || item.start.date,
     end: item.end?.dateTime || item.end?.date,
     allDay: !item.start.dateTime,
-    url: item.htmlLink,
+    description: item.description || "",
   };
 }
 
-export async function fetchEvents(start, end) {
-  const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString() });
-  const res = await fetch(`/api/google/events?${params}`);
-  if (!res.ok) throw new Error("Impossible de charger l'agenda");
-  const items = await res.json();
-  return items.map(toCalendarEvent);
+// Format attendu par <input type="datetime-local"> : 2026-11-20T09:00 en heure locale.
+export function toInputValue(date) {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+export function toGoogleEvent(form) {
+  return {
+    summary: form.title,
+    description: form.description,
+    start: { dateTime: new Date(form.start).toISOString() },
+    end: { dateTime: new Date(form.end).toISOString() },
+  };
 }

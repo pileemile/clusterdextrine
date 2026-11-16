@@ -1544,3 +1544,119 @@ a.card {
   border-radius: var(--radius);
   background: var(--paper);
 }
+
+.agenda__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.agenda__account {
+  font-weight: 500;
+}
+
+.agenda__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.agenda__info {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.agenda__connect {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 24px 8px;
+}
+
+.agenda__notice,
+.agenda__error {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.agenda__notice {
+  background: var(--wash);
+}
+
+.agenda__error {
+  border: 1px solid var(--ink);
+  font-weight: 500;
+}
+
+.agenda .fc-event {
+  cursor: pointer;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(14, 58, 86, 0.35);
+}
+
+.modal__box {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 480px;
+  padding: 20px;
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.modal__box h2 {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.field textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal__delete {
+  margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .agenda {
+    padding: 8px;
+  }
+
+  .agenda .fc .fc-toolbar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .agenda .fc .fc-toolbar-title {
+    font-size: 18px;
+  }
+
+  .agenda__actions,
+  .agenda__actions .btn {
+    flex: 1;
+  }
+}

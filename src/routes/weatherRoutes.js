@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const { SpanStatusCode, trace } = require("@opentelemetry/api");
 const Weather = require("../models/Weather");
 const { subscribe, changed } = require("../sse/weatherEvents");
 const { attributeBooking, readVisitorId, wantsMeasure } = require("../services/abService");
@@ -61,7 +62,15 @@ router.get("/", async (req, res) => {
       }
       if (q.toLowerCase() === "erreur") {
         await sleep(180);
-        return res.status(503).json({ error: "Service temporairement indisponible (simulation lab)." });
+        const span = trace.getActiveSpan();
+        const failure = new Error("Service temporairement indisponible (simulation lab).");
+        if (span) {
+          span.recordException(failure);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: failure.message });
+        }
+        const traceId = span?.spanContext().traceId;
+        const ref = traceId && !/^0+$/.test(traceId) ? ` (réf. ${traceId})` : "";
+        return res.status(503).json({ error: `Le service est momentanément indisponible.${ref}` });
       }
       await sleep(labDelayMs(q));
     }
@@ -137,31 +146,41 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  try {
-    const st = req.body?.st;
-    const ts = req.body?.ts ? new Date(req.body.ts) : null;
-    if (st && ts && !Number.isNaN(ts.getTime())) {
-      const taken = await Weather.exists({ st, ts });
-      if (taken) {
-        return res.status(409).json({ error: "Ce relevé existe déjà pour cette station et cette heure." });
+  const tracer = trace.getTracer("ciel");
+  await tracer.startActiveSpan("ciel.releve", async (span) => {
+    try {
+      const st = req.body?.st;
+      if (st) span.setAttribute("ciel.station.id", String(st));
+      const ts = req.body?.ts ? new Date(req.body.ts) : null;
+      if (st && ts && !Number.isNaN(ts.getTime())) {
+        const taken = await Weather.exists({ st, ts });
+        if (taken) {
+          res.status(409).json({ error: "Ce relevé existe déjà pour cette station et cette heure." });
+          return;
+        }
       }
-    }
 
-    const created = await Weather.create(req.body);
-    changed({ id: created._id, action: "created" });
+      const created = await Weather.create(req.body);
+      span.setAttribute("ciel.reading.id", String(created._id));
+      changed({ id: created._id, action: "created" });
 
-    if (wantsMeasure(req)) {
-      try {
-        await attributeBooking(readVisitorId(req));
-      } catch (err) {
-        console.error("Attribution A/B ignorée:", err.message);
+      if (wantsMeasure(req)) {
+        try {
+          await attributeBooking(readVisitorId(req));
+        } catch (err) {
+          console.error("Attribution A/B ignorée:", err.message);
+        }
       }
-    }
 
-    res.status(201).json(created);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+      res.status(201).json(created);
+    } catch (err) {
+      span.recordException(err);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+      if (!res.headersSent) res.status(400).json({ error: err.message });
+    } finally {
+      span.end();
+    }
+  });
 });
 
 router.put("/:id", async (req, res) => {

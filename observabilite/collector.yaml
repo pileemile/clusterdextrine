@@ -1,0 +1,39 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  attributes/sante:
+    actions:
+      - key: url.query
+        action: delete
+      - key: enduser.id
+        action: delete
+  transform/saisie:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(attributes["url.full"], "\\?.*", "")
+          - replace_pattern(attributes["http.target"], "\\?.*", "")
+          - replace_pattern(attributes["url.path"], "\\?.*", "")
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/sante, transform/saisie]
+      exporters: [otlp_grpc/jaeger, debug]

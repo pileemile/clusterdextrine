@@ -1,7 +1,10 @@
+require("./instrumentation");
 require("dotenv").config();
+const http = require("http");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const { trace } = require("@opentelemetry/api");
 const { connectDB } = require("./config/db");
 const { setupSwagger } = require("./config/swagger");
 const weatherRoutes = require("./routes/weatherRoutes");
@@ -12,6 +15,30 @@ const PORT = process.env.PORT || 3000;
 
 // Le front est servi par ce même process : aucune origine tierce.
 app.use(cors({ origin: false }));
+
+// Même origine que la page : /otlp/ part au collecteur, le préfixe est retiré.
+app.use("/otlp", express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
+  const target = new URL(req.url, endpoint.endsWith("/") ? endpoint : `${endpoint}/`);
+  const headers = { ...req.headers, host: target.host };
+  if (Buffer.isBuffer(req.body)) headers["content-length"] = String(Buffer.byteLength(req.body));
+  const proxyReq = http.request(target, { method: req.method, headers }, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on("error", () => {
+    if (!res.headersSent) res.status(502).end();
+  });
+  proxyReq.end(Buffer.isBuffer(req.body) ? req.body : undefined);
+});
+
+app.use((req, res, next) => {
+  const span = trace.getActiveSpan();
+  const traceId = span?.spanContext().traceId;
+  if (traceId && !/^0+$/.test(traceId)) res.setHeader("X-Trace-Id", traceId);
+  next();
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 

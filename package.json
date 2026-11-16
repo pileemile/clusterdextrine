@@ -8,6 +8,7 @@
     "loadtest": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html k6 run loadtest.js",
     "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
     "test": "node --test",
+    "tracing:build": "esbuild otel-web/tracing-entry.js --bundle --format=iife --outfile=public/tracing.js --platform=browser",
     "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js"
   },
   "keywords": [],
@@ -15,6 +16,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.2",
+    "@opentelemetry/sdk-node": "^0.223.2",
     "cors": "^2.8.6",
     "dotenv": "^18.0.6",
     "express": "^5.2.1",

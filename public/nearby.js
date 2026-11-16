@@ -10,6 +10,7 @@
   let map;
   let page = 0;
   let center = null;
+  let activeRequest = null;
 
   function showMessage(text) {
     if (!text) {
@@ -68,7 +69,7 @@
       .map((item) => {
         const name = item.callLetters || item.st || "Relevé";
         const key = String(item.callLetters || "").trim().length >= 2 ? item.callLetters : item.st;
-        const href = key ? `/?q=${encodeURIComponent(key)}` : "/";
+        const href = CielTenant.url(key ? `/?q=${encodeURIComponent(key)}` : "/");
         return `<li><a href="${esc(href)}">${esc(name)}</a> <span>${esc(CielGeo.formatDistance(item.distanceKm))}</span></li>`;
       })
       .join("");
@@ -84,42 +85,71 @@
     showMap(center, items);
   }
 
-  async function load(origin, note) {
+  async function load(origin, note, requestGeneration) {
+    CielTenant.assertGeneration(requestGeneration);
     center = { lat: origin.lat, lon: origin.lon };
     const params = CielGeo.nearbyParams(origin.lat, origin.lon, RADIUS_KM, page, 6);
-    const response = await fetch(`/api/weather?${params}`, { headers: { Accept: "application/json" } });
+    const response = await api(`/api/weather?${params}`, {
+      headers: { Accept: "application/json" },
+      signal: activeRequest?.signal,
+    });
     const data = await response.json().catch(() => ({}));
+    CielTenant.assertGeneration(requestGeneration);
     if (!response.ok) throw new Error(data.error || "Recherche impossible.");
     render(data, note);
   }
 
   async function run(task, busyLabel) {
+    const requestGeneration = CielTenant.generation;
+    activeRequest?.abort();
+    activeRequest = new AbortController();
     showMessage("");
     btn.disabled = true;
     btn.setAttribute("aria-busy", "true");
     const previous = btn.textContent;
     btn.textContent = busyLabel;
     try {
-      await task();
+      await task(requestGeneration);
     } catch (err) {
+      if (requestGeneration !== CielTenant.generation) return;
       list.innerHTML = "";
       mapEl.hidden = true;
       showMessage(err.message);
     } finally {
-      btn.disabled = false;
-      btn.removeAttribute("aria-busy");
-      btn.textContent = previous;
+      if (requestGeneration === CielTenant.generation) {
+        activeRequest = null;
+        btn.disabled = false;
+        btn.removeAttribute("aria-busy");
+        btn.textContent = previous;
+      }
     }
   }
 
+  document.addEventListener("tenantchange", () => {
+    activeRequest?.abort();
+    activeRequest = null;
+    center = null;
+    page = 0;
+    list.innerHTML = "";
+    mapEl.hidden = true;
+    showMessage("");
+    if (map) {
+      map.remove();
+      map = null;
+    }
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    btn.textContent = "Autour de moi (5 km)";
+  });
+
   btn.addEventListener("click", () => {
     page = 0;
-    run(async () => {
+    run(async (requestGeneration) => {
       const position = await CielGeo.getPosition({
         secure: window.isSecureContext,
         geolocation: navigator.geolocation,
       });
-      await load(position, `Autour de cette position.${formatAccuracy(position.accuracyM)}`);
+      await load(position, `Autour de cette position.${formatAccuracy(position.accuracyM)}`, requestGeneration);
     }, "Localisation…");
   });
 
@@ -127,9 +157,10 @@
     event.preventDefault();
     page = 0;
     const query = new FormData(form).get("address");
-    run(async () => {
+    run(async (requestGeneration) => {
       const hit = await CielGeo.geocode(String(query || ""), fetch);
-      await load(hit, hit.label);
+      CielTenant.assertGeneration(requestGeneration);
+      await load(hit, hit.label, requestGeneration);
     }, "Recherche…");
   });
 
@@ -137,6 +168,6 @@
     const button = event.target.closest("[data-nearby-page]");
     if (!button || button.disabled || !center) return;
     page = Number(button.dataset.nearbyPage);
-    run(() => load(center, "Même centre."), "Recherche…");
+    run((requestGeneration) => load(center, "Même centre.", requestGeneration), "Recherche…");
   });
 })();

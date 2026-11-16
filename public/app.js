@@ -151,10 +151,11 @@ function relativeHumidity(t, dew) {
 }
 
 async function request(url, { method = "GET", body, keepalive, signal, measure } = {}) {
+  const requestGeneration = CielTenant.generation;
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
   if (measure) headers["X-AB-Measure"] = "1";
-  const res = await fetch(url, {
+  const res = await api(url, {
     method,
     keepalive,
     signal,
@@ -162,12 +163,16 @@ async function request(url, { method = "GET", body, keepalive, signal, measure }
     headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch((error) => {
+    if (error.name === "AbortError") throw error;
+    return {};
+  });
+  CielTenant.assertGeneration(requestGeneration);
   if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
   return data;
 }
 
-const api = {
+const weatherApi = {
   list(params = {}, { signal } = {}) {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
     return request(`/api/weather?${qs}`, { signal });
@@ -207,6 +212,7 @@ function queueReading(payload) {
   items.push({
     id: crypto.randomUUID(),
     payload,
+    tenant: CielTenant.currentTenant,
     measure: ab.counted,
     createdAt: new Date().toISOString(),
   });
@@ -215,6 +221,10 @@ function queueReading(payload) {
 
 function removeOutbox(id) {
   writeOutbox(readOutbox().filter((item) => item.id !== id));
+}
+
+function visibleOutbox() {
+  return readOutbox().filter((item) => (item.tenant ?? null) === CielTenant.currentTenant);
 }
 
 function outboxCard(item) {
@@ -237,7 +247,7 @@ function outboxCard(item) {
 function renderOutbox() {
   const root = $("#outbox");
   if (!root) return;
-  const items = readOutbox();
+  const items = visibleOutbox();
   const offline = !navigator.onLine;
   if (!items.length && !offline) {
     root.hidden = true;
@@ -256,17 +266,20 @@ function renderOutbox() {
 }
 
 async function flushOutbox() {
-  if (outboxFlushing || !navigator.onLine || !readOutbox().length) return;
+  if (outboxFlushing || !navigator.onLine || !visibleOutbox().length) return;
+  const tenantGeneration = CielTenant.generation;
   outboxFlushing = true;
   let sent = 0;
   try {
-    for (const item of readOutbox()) {
-      if (!readOutbox().some((row) => row.id === item.id)) continue;
+    for (const item of visibleOutbox()) {
+      if (!visibleOutbox().some((row) => row.id === item.id)) continue;
       try {
-        await api.create(item.payload, { measure: item.measure });
+        await weatherApi.create(item.payload, { measure: item.measure });
+        if (tenantGeneration !== CielTenant.generation) break;
         removeOutbox(item.id);
         sent += 1;
       } catch (err) {
+        if (tenantGeneration !== CielTenant.generation) break;
         if (isNetworkFailure(err)) break;
         removeOutbox(item.id);
         toast({ msg: err.message || "Un relevé en attente a été refusé.", type: "error" });
@@ -275,8 +288,11 @@ async function flushOutbox() {
   } finally {
     outboxFlushing = false;
     renderOutbox();
+    if (tenantGeneration !== CielTenant.generation && visibleOutbox().length) {
+      setTimeout(flushOutbox, 0);
+    }
   }
-  if (sent) {
+  if (sent && tenantGeneration === CielTenant.generation) {
     toast({ msg: sent > 1 ? `${fmtInt(sent)} relevés envoyés.` : "Relevé envoyé." });
     loadList();
   }
@@ -341,19 +357,23 @@ function exposeIfAvailable() {
     if (!ab.counted || exposureSent) return;
     if (!document.querySelector("[data-new]")) return;
     exposureSent = true;
-    fetch("/api/ab/exposure", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    api("/api/ab/exposure", { method: "POST", credentials: "same-origin" })
+      .then((response) => response.text())
+      .catch(() => {});
   });
 }
 
 async function loadAssignment() {
+  const requestGeneration = CielTenant.generation;
   try {
-    const res = await fetch("/api/ab/assignment", {
+    const res = await api("/api/ab/assignment", {
       credentials: "same-origin",
       cache: "no-store",
       signal: AbortSignal.timeout(800),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
+    CielTenant.assertGeneration(requestGeneration);
     if (body.enabled === false) {
       ab.variant = "A";
       ab.counted = false;
@@ -362,9 +382,11 @@ async function loadAssignment() {
       ab.counted = true;
     }
   } catch {
+    if (requestGeneration !== CielTenant.generation) return;
     ab.variant = "A";
     ab.counted = false;
   }
+  if (requestGeneration !== CielTenant.generation) return;
   applyAbLabel();
   exposeIfAvailable();
 }
@@ -397,7 +419,7 @@ function stat(label, ico, value, unit, digits, sub = "") {
 function placeButton(s) {
   if (s.lat == null || s.lng == null) return "";
   if (CielPlaces.find({ name: s.callLabel, st: s.st, lat: s.lat, lng: s.lng })) {
-    return `<a class="btn" href="/lieux.html">${icon.pin}<span>Dans Mes lieux</span></a>`;
+    return `<a class="btn" href="${esc(CielTenant.url("/lieux.html"))}">${icon.pin}<span>Dans Mes lieux</span></a>`;
   }
   return `<button class="btn" type="button" data-save-place="${esc(s.id)}">${icon.pin}<span>Enregistrer le lieu</span></button>`;
 }
@@ -588,6 +610,7 @@ function applySearchUi(ui, { query = state.displayedQuery, error = "" } = {}) {
 }
 
 async function loadList({ gen = bumpListGen() } = {}) {
+  const tenantGeneration = CielTenant.generation;
   abortActiveList();
   const controller = new AbortController();
   listAbort = controller;
@@ -600,12 +623,12 @@ async function loadList({ gen = bumpListGen() } = {}) {
   $("#pager").innerHTML = "";
 
   try {
-    const res = await api.list(
+    const res = await weatherApi.list(
       { page: state.page, limit: state.limit, sort: state.sort, q: state.q },
       { signal: controller.signal }
     );
     // Protection logique : une ancienne réponse ne modifie plus l'écran.
-    if (gen !== listGen) return;
+    if (gen !== listGen || tenantGeneration !== CielTenant.generation) return;
     remember(res.data);
     state.docs = res.data;
     state.total = res.total;
@@ -619,7 +642,7 @@ async function loadList({ gen = bumpListGen() } = {}) {
   } catch (err) {
     // Annulation volontaire : pas de message d'échec.
     if (err.name === "AbortError") return;
-    if (gen !== listGen) return;
+    if (gen !== listGen || tenantGeneration !== CielTenant.generation) return;
     applySearchUi("error", { query: state.q, error: err.message });
     grid.innerHTML = emptyBlock({
       title: "Impossible de charger les relevés",
@@ -631,7 +654,7 @@ async function loadList({ gen = bumpListGen() } = {}) {
     $("#pager").innerHTML = "";
     renderMeta();
   } finally {
-    if (gen === listGen) {
+    if (gen === listGen && tenantGeneration === CielTenant.generation) {
       if (listAbort === controller) listAbort = null;
       grid.removeAttribute("aria-busy");
     }
@@ -639,8 +662,10 @@ async function loadList({ gen = bumpListGen() } = {}) {
 }
 
 async function loadFeatured() {
+  const tenantGeneration = CielTenant.generation;
   try {
-    const { data } = await api.list({ sort: "-ts", limit: 12 });
+    const { data } = await weatherApi.list({ sort: "-ts", limit: 12 });
+    if (tenantGeneration !== CielTenant.generation) return;
     remember(data);
     const doc = data.find((d) => !pending.has(String(d._id)) && summarize(d).temp != null) || data.find((d) => !pending.has(String(d._id)));
     if (!doc) {
@@ -649,6 +674,7 @@ async function loadFeatured() {
     }
     renderFeatured(doc);
   } catch (err) {
+    if (tenantGeneration !== CielTenant.generation) return;
     renderFeaturedMessage("Impossible de charger le relevé", err.message);
   }
 }
@@ -661,20 +687,21 @@ function randomBelow(max) {
 
 async function shuffleFeatured() {
   const token = ++featureToken;
+  const tenantGeneration = CielTenant.generation;
   let pool = [...cache.values()].filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
   if (!pool.length) {
     try {
-      const { data } = await api.list({ sort: "-ts", limit: 24, page: 1 + randomBelow(4) });
-      if (token !== featureToken) return;
+      const { data } = await weatherApi.list({ sort: "-ts", limit: 24, page: 1 + randomBelow(4) });
+      if (token !== featureToken || tenantGeneration !== CielTenant.generation) return;
       remember(data);
       pool = data.filter((d) => String(d._id) !== state.featuredId && !pending.has(String(d._id)));
     } catch (err) {
-      if (token !== featureToken) return;
+      if (token !== featureToken || tenantGeneration !== CielTenant.generation) return;
       toast({ msg: err.message, type: "error" });
       return;
     }
   }
-  if (token !== featureToken) return;
+  if (token !== featureToken || tenantGeneration !== CielTenant.generation) return;
   if (!pool.length) {
     toast({ msg: "Pas d'autre relevé à afficher." });
     return;
@@ -841,7 +868,9 @@ function trapFocus(e) {
 
 async function ensureDoc(id) {
   if (cache.has(id)) return cache.get(id);
-  const doc = await api.get(id);
+  const tenantGeneration = CielTenant.generation;
+  const doc = await weatherApi.get(id);
+  CielTenant.assertGeneration(tenantGeneration);
   cache.set(id, doc);
   return doc;
 }
@@ -1183,6 +1212,7 @@ function renderForm(doc = null) {
       btn.disabled = true;
       const values = readForm(form);
       const payload = isEdit ? null : toCreatePayload(values);
+      const tenantGeneration = CielTenant.generation;
       const parkOffline = () => {
         queueReading(payload);
         modal.dirty = false;
@@ -1196,7 +1226,10 @@ function renderForm(doc = null) {
         return;
       }
       try {
-        const saved = isEdit ? await api.update(s.id, toUpdatePayload(values)) : await api.create(payload, { measure: ab.counted });
+        const saved = isEdit
+          ? await weatherApi.update(s.id, toUpdatePayload(values))
+          : await weatherApi.create(payload, { measure: ab.counted });
+        CielTenant.assertGeneration(tenantGeneration);
         modal.dirty = false;
         if (isEdit) {
           replaceDoc(saved);
@@ -1217,6 +1250,7 @@ function renderForm(doc = null) {
           loadList();
         }
       } catch (err) {
+        if (tenantGeneration !== CielTenant.generation) return;
         if (!isEdit && isNetworkFailure(err)) parkOffline();
         else toast({ msg: err.message, type: "error" });
       } finally {
@@ -1234,6 +1268,7 @@ function scheduleDelete(id) {
   if (!doc || pending.has(id)) return;
   const name = doc.callLetters || "sans indicatif";
   const wasFeatured = state.featuredId === id;
+  const tenantGeneration = CielTenant.generation;
   closeModal();
   pending.add(id);
   renderGrid();
@@ -1258,9 +1293,10 @@ function scheduleDelete(id) {
       },
     },
     onExpire: async () => {
-      if (undone) return;
+      if (undone || tenantGeneration !== CielTenant.generation) return;
       try {
-        await api.remove(id);
+        await weatherApi.remove(id);
+        CielTenant.assertGeneration(tenantGeneration);
         pending.delete(id);
         cache.delete(id);
         state.docs = state.docs.filter((d) => String(d._id) !== id);
@@ -1273,6 +1309,7 @@ function scheduleDelete(id) {
           renderMeta();
         }
       } catch (err) {
+        if (tenantGeneration !== CielTenant.generation) return;
         pending.delete(id);
         renderGrid();
         renderMeta();
@@ -1283,7 +1320,7 @@ function scheduleDelete(id) {
 }
 
 addEventListener("pagehide", () => {
-  for (const id of pending) api.remove(id, { keepalive: true }).catch(() => {});
+  for (const id of pending) weatherApi.remove(id, { keepalive: true }).catch(() => {});
 });
 
 /* Notifications */
@@ -1390,7 +1427,7 @@ document.addEventListener("click", async (e) => {
         return;
       }
       const result = CielPlaces.save({ name: s.callLabel, st: s.st, lat: s.lat, lng: s.lng });
-      const voir = { label: "Voir", run: () => { location.href = "/lieux.html"; } };
+      const voir = { label: "Voir", run: () => { location.href = CielTenant.url("/lieux.html"); } };
       toast({ msg: result.created ? "Lieu enregistré." : "Ce lieu est déjà dans Mes lieux.", action: voir });
       if (state.featuredId === s.id) renderFeatured(doc);
       if (!$("#modal").hidden && modal.mode === "detail" && modal.docId === s.id) openModal(renderDetail(doc));
@@ -1482,6 +1519,7 @@ function setSseStatus(state, label) {
 async function refreshOpenDetail(change) {
   if (stopped || $("#modal").hidden || modal.mode !== "detail" || !modal.docId) return;
   const openId = modal.docId;
+  const tenantGeneration = CielTenant.generation;
 
   if (change?.action === "deleted" && String(change.id) === openId) {
     closeModal();
@@ -1492,12 +1530,14 @@ async function refreshOpenDetail(change) {
   if (change?.id && String(change.id) !== openId) return;
 
   try {
-    const doc = await api.get(openId);
+    const doc = await weatherApi.get(openId);
+    CielTenant.assertGeneration(tenantGeneration);
     cache.set(openId, doc);
     if (!stopped && !$("#modal").hidden && modal.mode === "detail" && modal.docId === openId) {
       openModal(renderDetail(doc));
     }
   } catch {
+    if (tenantGeneration !== CielTenant.generation) return;
     if (!$("#modal").hidden && modal.docId === openId) {
       closeModal();
       toast({ msg: "Ce relevé n’est plus disponible.", type: "error" });
@@ -1507,18 +1547,19 @@ async function refreshOpenDetail(change) {
 
 async function reloadFromLive(change) {
   if (stopped) return;
+  const tenantGeneration = CielTenant.generation;
   sseReloadDirty = true;
   if (sseReloadRunning) return;
   sseReloadRunning = true;
   try {
-    while (sseReloadDirty && !stopped) {
+    while (sseReloadDirty && !stopped && tenantGeneration === CielTenant.generation) {
       sseReloadDirty = false;
       await Promise.all([loadList(), loadFeatured(), refreshOpenDetail(change)]);
     }
   } catch {
     /* loadList / loadFeatured gèrent déjà l’erreur à l’écran */
   } finally {
-    sseReloadRunning = false;
+    if (tenantGeneration === CielTenant.generation) sseReloadRunning = false;
   }
 }
 
@@ -1530,16 +1571,19 @@ function openLiveStream() {
   }
 
   setSseStatus("connecting", "Connexion…");
-  stream = new EventSource("/api/weather/events");
+  const streamGeneration = CielTenant.generation;
+  const streamUrl = new URL("/api/weather/events", location.origin);
+  if (CielTenant.currentTenant) streamUrl.searchParams.set("tenant", CielTenant.currentTenant);
+  stream = new EventSource(streamUrl.toString());
 
   stream.addEventListener("ready", () => {
-    if (stopped) return;
+    if (stopped || streamGeneration !== CielTenant.generation) return;
     setSseStatus("connected", "En direct");
     reloadFromLive();
   });
 
   stream.addEventListener("weather-updated", (e) => {
-    if (stopped) return;
+    if (stopped || streamGeneration !== CielTenant.generation) return;
     let change = null;
     try {
       change = JSON.parse(e.data);
@@ -1551,7 +1595,7 @@ function openLiveStream() {
 
   // Ne pas appeler close() ici : EventSource se reconnecte tout seul
   stream.onerror = () => {
-    if (stopped) return;
+    if (stopped || streamGeneration !== CielTenant.generation) return;
     setSseStatus("interrupted", "Connexion interrompue");
   };
 }
@@ -1576,21 +1620,211 @@ function stopLive() {
 
 addEventListener("pagehide", stopLive);
 
-$("#grid").innerHTML = skeletons();
-renderOutbox();
-const initialQuery = new URLSearchParams(location.search).get("q");
-if (initialQuery) {
-  $("#searchInput").value = initialQuery;
-  scheduleSearch(initialQuery, { immediate: true });
+const tenantPicker = $(".tenant-picker");
+const tenantSelect = $("#tenantSelect");
+let tenantMemberships = [];
+
+function applyTenant(tenant) {
+  document.documentElement.style.setProperty("--tenant-color", safeColor(tenant?.color));
+  if (tenantSelect) tenantSelect.value = tenant?.slug || "";
+  $$('a[href^="/lieux.html"]').forEach((link) => {
+    link.href = CielTenant.url("/lieux.html");
+  });
 }
-loadFeatured();
-if (!initialQuery) loadList();
-loadAssignment();
+
+function clearTenantView() {
+  cancelDebounce();
+  abortActiveList();
+  bumpListGen();
+  featureToken += 1;
+  cache.clear();
+  pending.clear();
+  state.page = 1;
+  state.sort = "-ts";
+  state.q = "";
+  state.total = 0;
+  state.pages = 1;
+  state.featuredId = null;
+  state.docs = [];
+  state.displayedQuery = "";
+  state.error = "";
+  ab.variant = null;
+  ab.counted = false;
+  exposureSent = false;
+  applyAbLabel();
+  applySearchUi("loading", { query: "" });
+  $("#searchInput").value = "";
+  $("#grid").innerHTML = "";
+  $("#grid").setAttribute("aria-busy", "true");
+  $("#une").innerHTML = "";
+  $("#une").setAttribute("aria-busy", "true");
+  $("#browseCount").textContent = "";
+  $("#browseSub").textContent = "";
+  $("#pager").innerHTML = "";
+  $("#toasts").innerHTML = "";
+  $("#modal").hidden = true;
+  $("#modal").classList.remove("is-open");
+  $("#modalContent").innerHTML = "";
+  modal.mode = null;
+  modal.docId = null;
+  modal.dirty = false;
+  clearTimeout(modal.timer);
+  lockScroll(false);
+  CielGeo.clearGeocodeCache();
+  CielReleve.clearPreviews();
+}
+
+function closeTenantStream() {
+  if (stream) {
+    stream.close();
+    stream = null;
+  }
+  sseReloadDirty = false;
+  sseReloadRunning = false;
+}
+
+async function loadTenantData(initialQuery = "") {
+  stopped = false;
+  syncFilters();
+  renderOutbox();
+  loadAssignment();
+  openLiveStream();
+  startPolling();
+  loadFeatured();
+  if (initialQuery) {
+    $("#searchInput").value = initialQuery;
+    scheduleSearch(initialQuery, { immediate: true });
+  } else {
+    loadList();
+  }
+  flushOutbox();
+}
+
+function tenantRows(body) {
+  const rows = Array.isArray(body)
+    ? body
+    : body?.tenants || body?.memberships || body?.data || [];
+  if (!Array.isArray(rows)) throw new Error("La liste des tenants est invalide.");
+  return rows
+    .map((row) => (typeof row === "string" ? { slug: row } : row?.tenant || row))
+    .filter((row) => row && CielTenant.isValidSlug(row.slug))
+    .map((row) => ({
+      slug: row.slug,
+      name: String(row.name || row.label || row.slug),
+      color: safeColor(row.color),
+    }));
+}
+
+function showTenantAccessError(message) {
+  tenantPicker.hidden = true;
+  CielTenant.setTenant(null);
+  applyTenant(null);
+  closeTenantStream();
+  if (location.pathname.startsWith("/c/")) history.replaceState(null, "", "/");
+  $("#grid").removeAttribute("aria-busy");
+  $("#grid").innerHTML = emptyBlock({
+    title: "Accès aux tenants indisponible",
+    text: message,
+    ico: icon.alert,
+    alert: true,
+  });
+  renderFeaturedMessage("Tenant indisponible", message);
+  setSseStatus("interrupted", "Accès indisponible");
+}
+
+async function switchTo(slug, { push = true, initialQuery = "" } = {}) {
+  const tenant = tenantMemberships.find((item) => item.slug === slug);
+  if (!tenant) return false;
+  if (slug === CielTenant.currentTenant) {
+    applyTenant(tenant);
+    if (location.pathname !== `/c/${slug}/`) history.replaceState(null, "", `/c/${slug}/`);
+    return false;
+  }
+
+  clearTenantView();
+  CielTenant.setTenant(slug);
+  renderOutbox();
+  document.dispatchEvent(
+    new CustomEvent("tenantchange", {
+      detail: { tenant: CielTenant.currentTenant, generation: CielTenant.generation },
+    })
+  );
+  if (push) history.pushState(null, "", `/c/${slug}/`);
+  else history.replaceState(null, "", `/c/${slug}/`);
+  applyTenant(tenant);
+  closeTenantStream();
+  setSseStatus("connecting", "Connexion…");
+  loadTenantData(initialQuery);
+  return true;
+}
+
+tenantSelect?.addEventListener("change", async () => {
+  const requested = tenantSelect.value;
+  if (!(await switchTo(requested))) tenantSelect.value = CielTenant.currentTenant || "";
+});
+
+addEventListener("popstate", () => {
+  const requested = tenantFromPath(location.pathname);
+  const tenant = tenantMemberships.find((item) => item.slug === requested) || tenantMemberships[0];
+  if (tenant) switchTo(tenant.slug, { push: false });
+});
+
+async function initializeTenants() {
+  const requestGeneration = CielTenant.generation;
+  try {
+    const response = await api("/api/tenants", { cache: "no-store" });
+    if (!response.ok) throw new Error(`Impossible de charger les appartenances (${response.status}).`);
+    const body = await response.json();
+    CielTenant.assertGeneration(requestGeneration);
+    tenantMemberships = tenantRows(body);
+  } catch (error) {
+    showTenantAccessError(error.message || "Impossible de charger vos appartenances.");
+    toast({ msg: error.message || "Impossible de charger vos appartenances.", type: "error" });
+    return;
+  }
+
+  tenantSelect.replaceChildren(
+    ...tenantMemberships.map((tenant) => {
+      const option = document.createElement("option");
+      option.value = tenant.slug;
+      option.textContent = tenant.name;
+      return option;
+    })
+  );
+  tenantPicker.hidden = tenantMemberships.length === 0;
+  if (!tenantMemberships.length) {
+    showTenantAccessError("Aucun tenant n'est associé à votre compte.");
+    return;
+  }
+
+  const current = tenantMemberships.find((item) => item.slug === CielTenant.currentTenant);
+  if (current) {
+    const params = new URLSearchParams(location.search);
+    params.delete("tenant");
+    const query = params.toString();
+    const canonicalPath = `/c/${current.slug}/${query ? `?${query}` : ""}${location.hash}`;
+    if (
+      location.pathname !== `/c/${current.slug}/` ||
+      location.search !== (query ? `?${query}` : "")
+    ) {
+      history.replaceState(null, "", canonicalPath);
+    }
+    applyTenant(current);
+    await loadTenantData(params.get("q") || "");
+    return;
+  }
+  await switchTo(tenantMemberships[0].slug, {
+    push: false,
+    initialQuery: new URLSearchParams(location.search).get("q") || "",
+  });
+}
+
+$("#grid").innerHTML = skeletons();
+initializeTenants();
 addEventListener("online", () => {
   renderOutbox();
   flushOutbox();
 });
 addEventListener("offline", renderOutbox);
-flushOutbox();
 openLiveStream();
 startPolling();

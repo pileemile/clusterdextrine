@@ -1533,3 +1533,14 @@ a.card {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Agenda */
+
+.agenda {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}

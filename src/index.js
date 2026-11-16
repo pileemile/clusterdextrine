@@ -70,6 +70,8 @@ app.get("/api", (_req, res) => {
       googleDisconnect: "DELETE /api/google/disconnect",
       googleEvents: "GET /api/google/events?timeMin=&timeMax=",
       googleCreateEvent: "POST /api/google/events",
+      googleUpdateEvent: "PATCH /api/google/events/:id",
+      googleDeleteEvent: "DELETE /api/google/events/:id",
     },
     swagger: {
       ui: "/api-docs",

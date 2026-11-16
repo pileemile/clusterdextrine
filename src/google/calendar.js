@@ -29,6 +29,7 @@ function createCalendar(store) {
       }
     }
     if (!res.ok) throw await toError(res);
+    if (res.status === 204) return null;
     return res.json();
   }
 
@@ -52,7 +53,19 @@ function createCalendar(store) {
     });
   }
 
-  return { listEvents, createEvent };
+  function updateEvent(userId, id, event) {
+    return call(userId, `${EVENTS_URL}/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    });
+  }
+
+  function deleteEvent(userId, id) {
+    return call(userId, `${EVENTS_URL}/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  return { listEvents, createEvent, updateEvent, deleteEvent };
 }
 
 module.exports = { createCalendar };

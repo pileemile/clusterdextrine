@@ -11,6 +11,7 @@ const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
 const { tenantMiddleware } = require("./tenant/middleware");
+const googleRoutes = require("./routes/googleRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,6 +70,13 @@ app.get("/api", (_req, res) => {
       abAssignment: "GET /api/ab/assignment",
       abExposure: "POST /api/ab/exposure",
       abMetrics: "GET /api/ab/metrics",
+      googleAuth: "GET /api/google/auth",
+      googleStatus: "GET /api/google/status",
+      googleDisconnect: "DELETE /api/google/disconnect",
+      googleEvents: "GET /api/google/events?timeMin=&timeMax=",
+      googleCreateEvent: "POST /api/google/events",
+      googleUpdateEvent: "PATCH /api/google/events/:id",
+      googleDeleteEvent: "DELETE /api/google/events/:id",
     },
     swagger: {
       ui: "/api-docs",
@@ -81,6 +89,7 @@ setupSwagger(app);
 app.use("/api", tenantMiddleware);
 app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);
+app.use("/api/google", googleRoutes);
 
 connectDB()
   .then(() => {

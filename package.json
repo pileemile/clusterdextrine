@@ -9,7 +9,9 @@
     "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
     "test": "node --test",
     "tracing:build": "esbuild otel-web/tracing-entry.js --bundle --format=iife --outfile=public/tracing.js --platform=browser",
-    "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js"
+    "coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node scripts/lcov-relative.js",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev"
   },
   "keywords": [],
   "author": "",
@@ -19,14 +21,19 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.81.2",
     "@opentelemetry/sdk-node": "^0.223.2",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "cors": "^2.8.6",
-    "dotenv": "^18.0.6",
     "express": "^5.2.1",
     "mongoose": "^9.11.1",
     "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.10",
+    "prisma": "^7.10.1",
     "unpdf": "^1.7.0"
   }
 }

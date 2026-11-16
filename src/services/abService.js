@@ -180,6 +180,7 @@ module.exports = {
   isEnabled,
   variantFor,
   cookieHeader,
+  readCookie,
   resolveVisitor,
   readVisitorId,
   wantsMeasure,

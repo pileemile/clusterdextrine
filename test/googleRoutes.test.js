@@ -45,7 +45,7 @@ test("callback renvoie vers l'accueil si l'utilisateur refuse", async (t) => {
   const base = await startApp(t);
   const res = await fetch(`${base}/callback?error=access_denied`, { redirect: "manual" });
   assert.equal(res.status, 302);
-  assert.equal(res.headers.get("location"), "/?google=refused");
+  assert.equal(res.headers.get("location"), "/agenda.html?google=refused");
 });
 
 test("sans cookie : status déconnecté et events en 401", async (t) => {

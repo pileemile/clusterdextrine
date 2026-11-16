@@ -87,3 +87,11 @@ test("un 400 de Google remonte en bad_request", async (t) => {
   stubFetch(t, [{ status: 400 }]);
   await assert.rejects(createCalendar(fakeStore()).createEvent(USER, {}), { code: "bad_request", status: 400 });
 });
+
+test("updateEvent fait un PATCH sur l'événement", async (t) => {
+  const calls = stubFetch(t, [{ body: { id: "evt3" } }]);
+  await createCalendar(fakeStore()).updateEvent(USER, "evt3", { summary: "Nouveau titre" });
+
+  assert.equal(calls[0].init.method, "PATCH");
+  assert.ok(calls[0].url.endsWith("/events/evt3"));
+});

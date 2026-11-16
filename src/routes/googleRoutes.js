@@ -34,12 +34,12 @@ router.get("/callback", async (req, res) => {
   const userId = ab.readVisitorId(req);
   res.append("Set-Cookie", `${STATE_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
 
-  if (error) return res.redirect("/?google=refused");
+  if (error) return res.redirect("/agenda.html?google=refused");
   if (!userId || !expected || state !== expected || typeof code !== "string") {
     return res.status(400).json({ error: "invalid_state" });
   }
   await store.save(userId, await exchangeCode(code));
-  res.redirect("/?google=connected");
+  res.redirect("/agenda.html?google=connected");
 });
 
 router.get("/status", async (req, res) => {
@@ -63,6 +63,17 @@ router.post("/events", async (req, res) => {
   }
   const event = { summary, description, location, start, end };
   res.status(201).json(await calendar.createEvent(ab.readVisitorId(req), event));
+});
+
+router.patch("/events/:id", async (req, res) => {
+  const { summary, description, start, end } = req.body ?? {};
+  const event = { summary, description, start, end };
+  res.json(await calendar.updateEvent(ab.readVisitorId(req), req.params.id, event));
+});
+
+router.delete("/events/:id", async (req, res) => {
+  await calendar.deleteEvent(ab.readVisitorId(req), req.params.id);
+  res.status(204).end();
 });
 
 router.use((err, _req, res, _next) => {

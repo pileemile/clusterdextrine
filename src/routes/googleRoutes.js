@@ -7,7 +7,7 @@ const { createCalendar } = require("../google/calendar");
 const { GoogleError } = require("../google/errors");
 
 const STATE_COOKIE = "google_state";
-const STATE_ATTRS = "Path=/api/google; HttpOnly; SameSite=Lax";
+const STATE_ATTRS = "Path=/api/google; HttpOnly; Secure; SameSite=Lax";
 
 const store = createTokenStore();
 const calendar = createCalendar(store);
@@ -20,10 +20,12 @@ router.use((_req, res, next) => {
 
 // L'identifiant utilisateur est celui du cookie ab_visitor : l'app n'a pas de comptes.
 router.get("/auth", (req, res) => {
-  const { visitorId, fresh } = ab.resolveVisitor(req);
+  const { visitorId } = ab.resolveVisitor(req);
   const state = crypto.randomBytes(16).toString("base64url");
-  const cookies = [`${STATE_COOKIE}=${state}; Max-Age=600; ${STATE_ATTRS}`];
-  if (fresh) cookies.push(ab.cookieHeader(visitorId));
+  const cookies = [
+    `${STATE_COOKIE}=${state}; Max-Age=600; ${STATE_ATTRS}`,
+    ab.cookieHeader(visitorId),
+  ];
   res.set("Set-Cookie", cookies);
   res.redirect(authUrl(state));
 });

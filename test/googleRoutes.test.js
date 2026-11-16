@@ -29,7 +29,10 @@ test("auth pose le state et redirige vers Google", async (t) => {
   assert.equal(target.searchParams.get("access_type"), "offline");
   const stateCookie = cookies.find((c) => c.startsWith("google_state="));
   assert.ok(stateCookie.includes(`google_state=${target.searchParams.get("state")};`));
-  assert.ok(cookies.some((c) => c.startsWith("ab_visitor=")));
+  assert.ok(stateCookie.includes("; Secure;"));
+  const visitorCookie = cookies.find((c) => c.startsWith("ab_visitor="));
+  assert.ok(visitorCookie);
+  assert.ok(visitorCookie.includes("; Secure;"));
 });
 
 test("callback refuse un state qui ne correspond pas", async (t) => {

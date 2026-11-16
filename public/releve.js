@@ -8,6 +8,7 @@ const CielReleve = (function () {
   const FALLBACK = "La fiche n'a pas pu être préparée.";
   const OFFLINE = "Connexion impossible. Réessayez.";
   const REVOKE_AFTER_MS = 60000;
+  const previews = new Set();
 
   class ReleveError extends Error {
     constructor(message, status) {
@@ -27,29 +28,42 @@ const CielReleve = (function () {
   }
 
   async function fetchReleve(id, download = false) {
+    const requestGeneration = typeof CielTenant === "undefined" ? null : CielTenant.generation;
     let response;
     try {
-      response = await fetch(releveUrl(id, download), {
+      const request = typeof api === "function" ? api : fetch;
+      response = await request(releveUrl(id, download), {
         credentials: "same-origin",
         headers: { Accept: "application/pdf, application/json" },
       });
     } catch {
+      if (typeof CielTenant !== "undefined" && requestGeneration !== CielTenant.generation) {
+        CielTenant.assertGeneration(requestGeneration);
+      }
       throw new ReleveError(OFFLINE, 0);
     }
     if (!response.ok) throw new ReleveError(MESSAGES[response.status] || FALLBACK, response.status);
     const type = response.headers.get("Content-Type") || "";
     if (!type.startsWith("application/pdf")) throw new ReleveError(FALLBACK, response.status);
     const blob = await response.blob();
+    if (requestGeneration !== null) CielTenant.assertGeneration(requestGeneration);
     return { blob, name: filenameFrom(response.headers.get("Content-Disposition"), id) };
   }
 
   async function openReleve(id, browser) {
+    const requestGeneration = typeof CielTenant === "undefined" ? null : CielTenant.generation;
     const tab = browser.openTab();
     try {
       const { blob } = await fetchReleve(id, false);
+      if (requestGeneration !== null) CielTenant.assertGeneration(requestGeneration);
       const url = browser.createObjectURL(blob);
+      const preview = { tab, url, browser };
+      previews.add(preview);
       tab.show(url);
-      browser.later(() => browser.revokeObjectURL(url), REVOKE_AFTER_MS);
+      browser.later(() => {
+        browser.revokeObjectURL(url);
+        previews.delete(preview);
+      }, REVOKE_AFTER_MS);
     } catch (err) {
       tab.close();
       throw err;
@@ -57,8 +71,18 @@ const CielReleve = (function () {
   }
 
   async function saveReleve(id, browser) {
+    const requestGeneration = typeof CielTenant === "undefined" ? null : CielTenant.generation;
     const { blob, name } = await fetchReleve(id, true);
+    if (requestGeneration !== null) CielTenant.assertGeneration(requestGeneration);
     browser.save(blob, name);
+  }
+
+  function clearPreviews() {
+    for (const preview of previews) {
+      preview.browser.revokeObjectURL(preview.url);
+      preview.tab.close();
+    }
+    previews.clear();
   }
 
   function realBrowser() {
@@ -148,6 +172,7 @@ const CielReleve = (function () {
     fetchReleve,
     openReleve,
     saveReleve,
+    clearPreviews,
   };
 })();
 

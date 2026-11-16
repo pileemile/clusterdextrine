@@ -51,6 +51,10 @@
         </p>
 
         <div class="header__actions">
+          <label class="tenant-picker" for="tenantSelect" hidden>
+            <span>Tenant</span>
+            <select id="tenantSelect" aria-label="Choisir un tenant"></select>
+          </label>
           <label class="search" for="searchInput">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8" />
@@ -163,6 +167,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="/tenant.js" defer></script>
     <script src="/geo.js" defer></script>
     <script src="/nearby.js" defer></script>
     <script src="/releve.js" defer></script>

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { tenantPlugin } = require("../tenant/plugin");
 
 const abAssignmentSchema = new mongoose.Schema(
   {
@@ -11,6 +12,7 @@ const abAssignmentSchema = new mongoose.Schema(
     converted: { type: Boolean, default: false },
     convertedAt: Date,
     bookings: { type: Number, default: 0 },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   {
     collection: "ab_assignments",
@@ -18,6 +20,8 @@ const abAssignmentSchema = new mongoose.Schema(
   }
 );
 
-abAssignmentSchema.index({ experiment: 1, visitorId: 1 }, { unique: true });
+abAssignmentSchema.index({ tenantId: 1, experiment: 1, visitorId: 1 }, { unique: true });
+
+abAssignmentSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model("AbAssignment", abAssignmentSchema);

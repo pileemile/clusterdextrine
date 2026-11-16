@@ -181,7 +181,7 @@ router.post("/", async (req, res) => {
       if (st) span.setAttribute("ciel.station.id", String(st));
       const ts = req.body?.ts ? new Date(req.body.ts) : null;
       if (st && ts && !Number.isNaN(ts.getTime())) {
-        const taken = await Weather.exists({ st, ts });
+        const taken = await Weather.exists({ st, ts, tenantId: req.tenant._id });
         if (taken) {
           res.status(409).json({ error: "Ce relevé existe déjà pour cette station et cette heure." });
           return;

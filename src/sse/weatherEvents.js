@@ -3,7 +3,9 @@
  * Contrat aligné sur le TP : ready, weather-updated, keepalive 15s.
  */
 
-const clients = new Set();
+const { getTenant } = require("../tenant/context");
+
+const clients = new Map();
 const HEARTBEAT_MS = 15_000;
 
 function writeEvent(res, { event, data, id }) {
@@ -33,13 +35,19 @@ function sendSafe(res, payload) {
 let eventSeq = 0;
 
 function subscribe(req, res) {
+  const tenant = req.tenant ?? getTenant();
+  if (!tenant) {
+    res.status(400).json({ error: "Tenant manquant pour le flux d'événements." });
+    return res;
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   if (typeof res.flushHeaders === "function") res.flushHeaders();
 
-  clients.add(res);
+  clients.set(res, String(tenant._id));
 
   sendSafe(res, {
     event: "ready",
@@ -60,6 +68,10 @@ function subscribe(req, res) {
  * @param {{ id: string, action: 'created'|'updated'|'deleted' }} change
  */
 function changed(change) {
+  const tenant = getTenant();
+  if (!tenant) return;
+  const tenantId = String(tenant._id);
+
   const payload = {
     event: "weather-updated",
     data: {
@@ -68,13 +80,13 @@ function changed(change) {
     },
     id: ++eventSeq,
   };
-  for (const res of [...clients]) {
-    sendSafe(res, payload);
+  for (const [res, clientTenantId] of [...clients]) {
+    if (clientTenantId === tenantId) sendSafe(res, payload);
   }
 }
 
 function heartbeat() {
-  for (const res of [...clients]) {
+  for (const res of [...clients.keys()]) {
     try {
       res.write(": keepalive\n\n");
     } catch {

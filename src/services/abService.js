@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const AbAssignment = require("../models/AbAssignment");
+const { getTenant } = require("../tenant/context");
 
 /**
  * Clé d'expérience. Ne pas la modifier en cours d'exercice :
@@ -155,7 +156,7 @@ function withRate(row) {
 
 async function metrics() {
   const rows = await AbAssignment.aggregate([
-    { $match: { experiment: EXP } },
+    { $match: { tenantId: getTenant()._id, experiment: EXP } },
     {
       $group: {
         _id: "$variant",

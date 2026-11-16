@@ -76,14 +76,18 @@ setupSwagger(app);
 app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Front : http://localhost:${PORT}`);
-      console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+if (require.main === module) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Front : http://localhost:${PORT}`);
+        console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+      });
+    })
+    .catch((err) => {
+      console.error("Connexion MongoDB échouée:", err.message);
+      process.exit(1);
     });
-  })
-  .catch((err) => {
-    console.error("Connexion MongoDB échouée:", err.message);
-    process.exit(1);
-  });
+}
+
+module.exports = app;

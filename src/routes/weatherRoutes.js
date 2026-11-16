@@ -4,6 +4,8 @@ const { SpanStatusCode, trace } = require("@opentelemetry/api");
 const Weather = require("../models/Weather");
 const { subscribe, changed } = require("../sse/weatherEvents");
 const { attributeBooking, readVisitorId, wantsMeasure } = require("../services/abService");
+const { applyPdfHeaders, loadReleve, ownedPayload, publicError, readerFrom } = require("../pdf/releve");
+const { NearbyError, nearbyResponse } = require("../geo/nearby");
 
 const router = express.Router();
 
@@ -39,6 +41,20 @@ function sleep(ms) {
 
 // Liste (pagination, filtre st exact, recherche q, tri)
 router.get("/", async (req, res) => {
+  const nearby =
+    req.query.lon !== undefined ||
+    req.query.radiusKm !== undefined ||
+    (req.query.lat !== undefined && req.query.lng === undefined);
+  if (nearby) {
+    try {
+      const page = await nearbyResponse(req.query);
+      return res.json(page);
+    } catch (err) {
+      if (err instanceof NearbyError) return res.status(400).json({ error: err.message });
+      return res.status(500).json({ error: "Recherche impossible." });
+    }
+  }
+
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
@@ -128,6 +144,18 @@ router.get("/events", (req, res) => {
   subscribe(req, res);
 });
 
+router.get("/:id/releve.pdf", async (req, res) => {
+  try {
+    const file = await loadReleve(req.params.id, readerFrom(req));
+    applyPdfHeaders(res, file, String(req.query.download) === "true");
+    res.status(200).end(file.pdf);
+  } catch (err) {
+    const out = publicError(err);
+    if (out.status === 500) console.error("Fiche PDF:", err.message);
+    if (!res.headersSent) res.status(out.status).json(out.body);
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseObjectId(req.params.id);
@@ -160,7 +188,7 @@ router.post("/", async (req, res) => {
         }
       }
 
-      const created = await Weather.create(req.body);
+      const created = await Weather.create(ownedPayload(req.body, readerFrom(req)));
       span.setAttribute("ciel.reading.id", String(created._id));
       changed({ id: created._id, action: "created" });
 

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fiche {{reference}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 20mm 18mm 22mm;
+      }
+      * {
+        font-family: "DejaVu Sans";
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fiche {{reference}}</h1>
+    <p><b>{{day}}</b></p>
+    <p>à <b>{{time}}</b> (heure de Paris)</p>
+    <p>Station <b>{{station}}</b></p>
+    <p>{{place}}</p>
+    <p>Température {{temperature}}</p>
+    <p>Émise le {{issuedOn}}</p>
+  </body>
+</html>

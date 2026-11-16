@@ -2,7 +2,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const nf = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const df = new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+const df = new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Paris" });
 
 function coords(lat, lng) {
   const ns = lat >= 0 ? "N" : "S";

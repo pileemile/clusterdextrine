@@ -7,6 +7,7 @@ const cors = require("cors");
 const { trace } = require("@opentelemetry/api");
 const { connectDB } = require("./config/db");
 const { setupSwagger } = require("./config/swagger");
+const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
 
@@ -33,6 +34,11 @@ app.use("/otlp", express.raw({ type: () => true, limit: "1mb" }), (req, res) => 
 });
 
 app.use((req, res, next) => {
+  attachReader(req, res);
+  next();
+});
+
+app.use((req, res, next) => {
   const span = trace.getActiveSpan();
   const traceId = span?.spanContext().traceId;
   if (traceId && !/^0+$/.test(traceId)) res.setHeader("X-Trace-Id", traceId);
@@ -48,7 +54,9 @@ app.get("/api", (_req, res) => {
     collection: "data",
     endpoints: {
       list: "GET /api/weather?page=1&limit=20&st=&q=&sort=-temp",
+      nearby: "GET /api/weather?lat=&lon=&radiusKm=5&page=0&size=6",
       one: "GET /api/weather/:id",
+      releve: "GET /api/weather/:id/releve.pdf?download=true",
       events: "GET /api/weather/events (SSE)",
       create: "POST /api/weather",
       update: "PUT /api/weather/:id",

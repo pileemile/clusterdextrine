@@ -65,12 +65,12 @@ const nf = (digits) => {
 const fmtNum = (v, digits = 1) => nf(digits).format(v);
 const fmtInt = (v) => new Intl.NumberFormat("fr-FR").format(v);
 const fmtTemp = (v) => `${fmtNum(v, 1)}°`;
-const dfLong = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" });
-const dfShort = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const dfLong = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" });
+const dfShort = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Paris" });
 const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
 const fmtDate = (d, short = false) => {
   if (!isValidDate(d)) return "Date inconnue";
-  return short ? dfShort.format(d) : `${dfLong.format(d)} UTC`;
+  return short ? dfShort.format(d) : dfLong.format(d);
 };
 const fmtCoords = (lat, lng) => {
   if (lat == null || lng == null) return "Position inconnue";
@@ -888,6 +888,7 @@ function renderDetail(doc) {
       ? ""
       : `<div class="compass" style="--a:${Number(s.windAngle)}deg" aria-hidden="true"><span class="compass__n">N</span><span class="compass__needle"></span></div>`;
 
+  const cancelled = doc.status === "CANCELLED";
   return (root) => {
     modal.mode = "detail";
     modal.docId = s.id;
@@ -904,7 +905,14 @@ function renderDetail(doc) {
           <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
           ${placeButton(s)}
           <button class="btn" type="button" data-delete="${esc(s.id)}">${icon.trash}<span>Supprimer</span></button>
+          ${
+            cancelled
+              ? ""
+              : `<button class="btn" type="button" data-releve-open data-releve="${esc(s.id)}"><span data-releve-label>Fiche (PDF)</span></button>
+          <button class="btn" type="button" data-releve-save data-releve="${esc(s.id)}"><span>Enregistrer</span></button>`
+          }
         </div>
+        <p class="detail__alert" data-releve-error role="alert"${cancelled ? "" : " hidden"}>${cancelled ? esc(CielReleve.MESSAGES[409]) : ""}</p>
         <div class="measures">
           ${measure({ label: "Température", ico: icon.thermo, value: s.temp, unit: "°C" })}
           ${measure({ label: "Point de rosée", ico: icon.thermo, value: s.dew, unit: "°C" })}

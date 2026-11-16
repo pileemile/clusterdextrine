@@ -23,6 +23,10 @@
     "dotenv": "^18.0.6",
     "express": "^5.2.1",
     "mongoose": "^9.11.1",
+    "pdfkit": "^0.20.2",
     "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "unpdf": "^1.7.0"
   }
 }

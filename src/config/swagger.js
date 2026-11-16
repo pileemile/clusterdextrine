@@ -44,7 +44,7 @@ const spec = {
           {
             name: "lat",
             in: "query",
-            description: "Latitude d'une ville. Avec lng, limite aux relevés proches.",
+            description: "Latitude. Avec lng et km : boîte large. Avec lon et radiusKm : cercle, tri par distance.",
             schema: { type: "number", example: 52.37 },
           },
           {
@@ -52,6 +52,24 @@ const spec = {
             in: "query",
             description: "Longitude d'une ville. Avec lat, limite aux relevés proches.",
             schema: { type: "number", example: 4.9 },
+          },
+          {
+            name: "lon",
+            in: "query",
+            description: "Longitude WGS 84, avec lat. De -180 à 180.",
+            schema: { type: "number", example: 4.832 },
+          },
+          {
+            name: "radiusKm",
+            in: "query",
+            description: "Rayon en kilomètres. Défaut 5, maximum 20. Absent avec lng.",
+            schema: { type: "number", default: 5, maximum: 20 },
+          },
+          {
+            name: "size",
+            in: "query",
+            description: "Taille de page de la recherche autour. De 1 à 50, défaut 6.",
+            schema: { type: "integer", default: 6 },
           },
           {
             name: "km",
@@ -142,6 +160,40 @@ const spec = {
             schema: { type: "string", example: "1" },
           },
         ],
+      },
+    },
+    "/api/weather/{id}/releve.pdf": {
+      get: {
+        tags: ["weather"],
+        summary: "Fiche PDF d'un relevé",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "download",
+            in: "query",
+            schema: { type: "boolean", default: false },
+            description: "true : attachment. Absent : inline.",
+          },
+        ],
+        responses: {
+          200: {
+            description: "PDF",
+            headers: {
+              "Content-Disposition": { schema: { type: "string" } },
+              "Cache-Control": { schema: { type: "string", example: "no-store" } },
+            },
+            content: { "application/pdf": { schema: { type: "string", format: "binary" } } },
+          },
+          401: { description: "Pas de cookie ciel_lecteur", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Introuvable, ou relevé d'un autre lecteur", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "Relevé annulé", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          500: { description: "Moteur PDF en échec", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
       },
     },
     "/api/weather/{id}": {

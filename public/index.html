@@ -14,6 +14,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
   </head>
   <body>
     <a class="skip" href="#une">Aller au contenu</a>
@@ -93,6 +99,21 @@
           <button class="btn" type="button" id="clearSearch" hidden>Effacer</button>
         </div>
 
+        <div class="nearby" id="nearby">
+          <button class="btn" type="button" id="nearbyBtn">Autour de moi (5 km)</button>
+          <form class="nearby__form" id="nearbyForm">
+            <div class="field">
+              <label for="nearbyAddress">ou une adresse, un code postal</label>
+              <input id="nearbyAddress" name="address" type="text" maxlength="120" autocomplete="off" />
+            </div>
+            <button class="btn" type="submit">Chercher</button>
+          </form>
+          <p class="nearby__note">Distances à vol d'oiseau. La position n'est pas enregistrée.</p>
+          <p class="nearby__alert" id="nearbyMsg" role="alert" hidden></p>
+          <div id="nearbyMap" hidden></div>
+          <div class="nearby__list" id="nearbyList"></div>
+        </div>
+
         <div class="filters" id="filters" role="group" aria-label="Trier les relevés">
           <button class="btn" type="button" data-sort="-ts" aria-pressed="true">Récents</button>
           <button class="btn" type="button" data-sort="-temp" aria-pressed="false">Plus chauds</button>
@@ -136,6 +157,14 @@
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
     <script src="/tracing.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/geo.js" defer></script>
+    <script src="/nearby.js" defer></script>
+    <script src="/releve.js" defer></script>
     <script src="/places.js" defer></script>
     <script src="/app.js" defer></script>
   </body>

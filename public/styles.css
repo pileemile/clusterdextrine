@@ -252,6 +252,50 @@ svg {
   outline: none;
 }
 
+.nearby {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+  margin: 0 0 20px;
+}
+
+.nearby__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.nearby__form .field {
+  margin: 0;
+}
+
+.nearby__note,
+.nearby__alert,
+.nearby__list,
+#nearbyMap {
+  flex-basis: 100%;
+}
+
+.nearby__note,
+.nearby__alert {
+  margin: 0;
+}
+
+.nearby__alert {
+  font-weight: 500;
+}
+
+#nearbyMap {
+  width: 100%;
+  height: 280px;
+}
+
+#nearbyMap[hidden] {
+  display: none;
+}
+
 .search:focus-within {
   border-color: var(--sky);
   outline: 2px solid var(--sky);
@@ -917,6 +961,15 @@ a.card {
 
 .detail__actions {
   margin-top: 20px;
+}
+
+.detail__alert {
+  margin: 8px 0 0;
+  font-weight: 500;
+}
+
+.detail__alert[hidden] {
+  display: none;
 }
 
 .measures {

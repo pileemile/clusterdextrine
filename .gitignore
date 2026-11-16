@@ -5,3 +5,5 @@ coverage/
 rapport.html
 k6-report.html
 k6-report.json
+cypress/screenshots/
+cypress/videos/

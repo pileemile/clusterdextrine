@@ -49,6 +49,10 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+app.get("/c/:slug{/*rest}", (_req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+});
+
 app.get("/api", (_req, res) => {
   res.json({
     name: "API sample_weatherdata",

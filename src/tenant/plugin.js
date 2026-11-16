@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const { getTenant } = require("./context");
 
 const READS = ["find", "findOne", "countDocuments", "distinct"];
@@ -56,6 +57,19 @@ function tenantPlugin(schema, { sharedReads = false } = {}) {
     const tenantId = currentTenantId();
     for (const doc of [].concat(docs)) doc.tenantId = tenantId;
   });
+
+  schema.pre("aggregate", function () {
+    const tenantId = new mongoose.Types.ObjectId(String(currentTenantId()));
+    const match = sharedReads ? { $or: [{ tenantId }, { tenantId: { $exists: false } }] } : { tenantId };
+    const pipeline = this.pipeline();
+    const first = pipeline[0];
+    if (first && first.$geoNear) {
+      first.$geoNear.query = first.$geoNear.query ? { $and: [first.$geoNear.query, match] } : match;
+    } else {
+      pipeline.unshift({ $match: match });
+    }
+  });
+
   schema.pre("estimatedDocumentCount", function () {
     throw new Error("estimatedDocumentCount ignore le tenant : utiliser countDocuments.");
   });

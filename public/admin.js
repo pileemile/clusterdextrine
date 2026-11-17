@@ -30,6 +30,20 @@ async function refreshStats() {
   renderStats(await api("/api/admin/stats"));
 }
 
+async function withLoading(btn, task) {
+  if (!btn || btn.disabled) return;
+  btn.classList.add("is-loading");
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  try {
+    await task();
+  } finally {
+    btn.classList.remove("is-loading");
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -385,14 +399,16 @@ $$("#adminNav [data-tab]").forEach((btn) => {
   });
 });
 
-$("refreshUsers").addEventListener("click", async () => {
+$("refreshUsers").addEventListener("click", () => {
   clearError();
-  try {
-    cache.users = await api("/api/admin/users");
-    renderUsers();
-  } catch (error) {
-    report(error);
-  }
+  withLoading($("refreshUsers"), async () => {
+    try {
+      cache.users = await api("/api/admin/users");
+      renderUsers();
+    } catch (error) {
+      report(error);
+    }
+  });
 });
 
 $("usersTable").addEventListener("click", async (event) => {
@@ -501,23 +517,27 @@ $("tenantsTable").addEventListener("click", async (event) => {
   }
 });
 
-$("refreshWeather").addEventListener("click", async () => {
+$("refreshWeather").addEventListener("click", () => {
   clearError();
-  try {
-    renderWeather(await api("/api/admin/weather"));
-    await refreshStats();
-  } catch (error) {
-    report(error);
-  }
+  withLoading($("refreshWeather"), async () => {
+    try {
+      renderWeather(await api("/api/admin/weather"));
+      await refreshStats();
+    } catch (error) {
+      report(error);
+    }
+  });
 });
 
-$("refreshLogs").addEventListener("click", async () => {
+$("refreshLogs").addEventListener("click", () => {
   clearError();
-  try {
-    renderLogs(await api("/api/admin/logs"));
-  } catch (error) {
-    report(error);
-  }
+  withLoading($("refreshLogs"), async () => {
+    try {
+      renderLogs(await api("/api/admin/logs"));
+    } catch (error) {
+      report(error);
+    }
+  });
 });
 
 $("weatherTable").addEventListener("click", async (event) => {

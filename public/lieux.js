@@ -149,6 +149,7 @@ async function showCity(city) {
     if (!res.ok) throw new Error("chargement");
     const items = (await res.json()).data || [];
     CielTenant.assertGeneration(requestGeneration);
+    CielPlaces.ping("lieu_cherche", `${city.name} · ${items.length} relevé(s)`);
     if (!items.length) {
       box.innerHTML = `<p class="section__sub">Aucun relevé en ligne à proximité de ${esc(city.name)}.</p>`;
       return;

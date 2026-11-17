@@ -15,6 +15,7 @@ const { tenantMiddleware, requireMemberToWrite } = require("./tenant/middleware"
 const googleRoutes = require("./routes/googleRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
+const logRoutes = require("./routes/logRoutes");
 const {
   apiLimiter,
   writeLimiter,
@@ -113,6 +114,7 @@ app.get("/api", (_req, res, next) => {
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/google", googleRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/logs", logRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/ab", tenantMiddleware, abRoutes);
 app.use("/api/weather", tenantMiddleware, requireMemberToWrite, weatherRoutes);

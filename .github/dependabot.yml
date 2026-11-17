@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /agenda-web
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      agenda-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /otel-web
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      otel-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

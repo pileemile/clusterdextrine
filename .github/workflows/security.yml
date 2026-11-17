@@ -1,0 +1,123 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    # Ce nom est un status check exigé par le ruleset (scripts/setup-branch-protection.sh).
+    name: semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: semgrep/semgrep
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pas de .semgrepignore : il remplacerait les exclusions par défaut (test/, *.min.js, node_modules…).
+      # Les fichiers générés et le test OTel (faux secret) sont exclus ici.
+      # Cible "." explicite : sans elle, l'image Docker scanne /src par défaut.
+      - name: Scan
+        run: |
+          semgrep scan . \
+            --config p/javascript \
+            --config p/nodejsscan \
+            --config p/secrets \
+            --metrics=off \
+            --exclude public/tracing.js \
+            --exclude otel-web/tracing.test.mjs \
+            --exclude 'k6-report.*' \
+            --exclude rapport.html \
+            --exclude cypress \
+            --exclude coverage \
+            --json -o semgrep.json
+
+      # Bloque seulement sur la sévérité ERROR ; les WARNING sont listés dans le résumé.
+      - name: Résumé dans la PR
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          from collections import Counter
+
+          out = open(os.environ["GITHUB_STEP_SUMMARY"], "a")
+          if not os.path.exists("semgrep.json") or os.path.getsize("semgrep.json") == 0:
+              print("::error::semgrep.json est absent ou vide : le scan n'a pas tourné correctement.")
+              sys.exit(1)
+
+          results = json.load(open("semgrep.json")).get("results", [])
+          counts = Counter(r["extra"]["severity"] for r in results)
+          print("## Semgrep", file=out)
+          print(f"**ERROR : {counts.get('ERROR', 0)}** · WARNING : {counts.get('WARNING', 0)} · INFO : {counts.get('INFO', 0)}", file=out)
+          if results:
+              print(file=out)
+              print("| Sévérité | Emplacement | Règle |", file=out)
+              print("|---|---|---|", file=out)
+              for r in sorted(results, key=lambda r: r["extra"]["severity"]):
+                  rule = r["check_id"].split(".")[-1]
+                  print(f"| {r['extra']['severity']} | `{r['path']}:{r['start']['line']}` | {rule} |", file=out)
+          for r in results:
+              level = "error" if r["extra"]["severity"] == "ERROR" else "warning"
+              msg = r["extra"]["message"].splitlines()[0]
+              print(f"::{level} file={r['path']},line={r['start']['line']}::{msg}")
+          sys.exit(1 if counts.get("ERROR") else 0)
+          PY
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  npm-audit:
+    # Ce nom est un status check exigé par le ruleset (scripts/setup-branch-protection.sh).
+    name: npm-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Bloquant : dépendances de production, vulnérabilités high ou critical.
+      - name: Audit production
+        run: |
+          for dir in . agenda-web otel-web; do
+            echo "::group::npm audit ${dir}"
+            npm audit --prefix "${dir}" --omit=dev --audit-level=high
+            echo "::endgroup::"
+          done
+
+      # Informatif : dépendances de dev comprises (cypress, prisma, esbuild…).
+      - name: Audit complet (informatif)
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "## npm audit (dev compris)"
+            for dir in . agenda-web otel-web; do
+              echo "### ${dir}"
+              echo '```'
+              npm audit --prefix "${dir}" --audit-level=high | tail -n 20 || true
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

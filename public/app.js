@@ -168,6 +168,7 @@ async function request(url, { method = "GET", body, keepalive, signal, measure }
     return {};
   });
   CielTenant.assertGeneration(requestGeneration);
+  if (res.status === 401) throw new Error("Connectez-vous pour créer, modifier ou supprimer des relevés.");
   if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
   return data;
 }
@@ -1821,6 +1822,87 @@ async function initializeTenants() {
 
 $("#grid").innerHTML = skeletons();
 initializeTenants();
+
+/* Connexion */
+
+let me = null;
+
+async function loadMe() {
+  try {
+    const res = await fetch("/api/google/me", { credentials: "same-origin", cache: "no-store" });
+    me = res.ok ? await res.json() : null;
+  } catch {
+    me = null;
+  }
+  const btn = $("#loginBtn");
+  if (!btn) return;
+  btn.textContent = me ? me.name || me.email : "Connexion";
+  btn.setAttribute("aria-label", me ? `Compte : ${me.name || me.email}` : "Se connecter");
+}
+
+function loginNextPath() {
+  const slug = CielTenant.currentTenant;
+  return slug ? `/c/${slug}/` : "/";
+}
+
+function renderLogin() {
+  return (root) => {
+    modal.mode = "login";
+    const tenant = tenantMemberships.find((item) => item.slug === CielTenant.currentTenant);
+    if (me) {
+      const names = tenantMemberships.map((item) => esc(item.name)).join(", ") || "aucun";
+      root.innerHTML = `
+        <div class="form login">
+          <h2 class="form__title" id="modalTitle">Connecté</h2>
+          <p class="login__who">${esc(me.name || me.email)}<span>${esc(me.email)}</span></p>
+          <p class="form__lead">Vos tenants : ${names}.</p>
+          <div class="form__actions login__actions">
+            <button class="btn" type="button" data-logout>Se déconnecter</button>
+            <button class="btn" type="button" data-close>Fermer</button>
+          </div>
+        </div>`;
+    } else {
+      const where = tenant ? ` dans <strong>${esc(tenant.name)}</strong>` : "";
+      const href = `/api/google/auth?next=${encodeURIComponent(loginNextPath())}`;
+      root.innerHTML = `
+        <div class="form login">
+          <h2 class="form__title" id="modalTitle">Connexion</h2>
+          <p class="form__lead">Connectez-vous pour créer, modifier ou supprimer des relevés${where}. Sans compte, vous pouvez seulement les consulter.</p>
+          <div class="form__actions login__actions">
+            <a class="btn btn--primary" href="${esc(href)}">Se connecter avec Google</a>
+            <button class="btn" type="button" data-close>Annuler</button>
+          </div>
+        </div>`;
+    }
+  };
+}
+
+$("#loginBtn")?.addEventListener("click", () => openModal(renderLogin()));
+
+$("#modalContent").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-logout]");
+  if (!btn) return;
+  btn.disabled = true;
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } finally {
+    // Recharge : la liste des tenants et les droits redeviennent ceux d'un anonyme.
+    location.assign(loginNextPath());
+  }
+});
+
+(function readLoginResult() {
+  const params = new URLSearchParams(location.search);
+  const result = params.get("google");
+  if (!result) return;
+  params.delete("google");
+  const rest = params.toString();
+  history.replaceState(history.state, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+  if (result === "connected") toast({ msg: "Vous êtes connecté." });
+  else if (result === "refused") toast({ msg: "Connexion annulée.", type: "error" });
+})();
+
+loadMe();
 addEventListener("online", () => {
   renderOutbox();
   flushOutbox();

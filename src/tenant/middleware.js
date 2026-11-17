@@ -1,11 +1,11 @@
 const Tenant = require("../models/Tenant");
-const User = require("../models/User");
 const Membership = require("../models/Membership");
+const { currentUser } = require("../auth/session");
 const { runWithTenant } = require("./context");
 
 const HEADER = "x-tenant";
-const USER_HEADER = "x-user";
 const SSE_PATHS = new Set(["/weather/events", "/events"]);
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function readSlug(req) {
   const fromHeader = req.get(HEADER);
@@ -14,11 +14,9 @@ function readSlug(req) {
   return undefined;
 }
 async function allowed(req, tenant) {
-  const email = req.get(USER_HEADER);
-  if (email === undefined || email === "") return true;
-  const user = await User.findOne({ email: String(email).trim().toLowerCase() }).select("_id").lean();
-  if (!user) return false;
-  return Boolean(await Membership.exists({ userId: user._id, tenantId: tenant._id }));
+  req.user = await currentUser(req);
+  if (!req.user) return true;
+  return Boolean(await Membership.exists({ userId: req.user._id, tenantId: tenant._id }));
 }
 
 async function tenantMiddleware(req, res, next) {
@@ -32,6 +30,7 @@ async function tenantMiddleware(req, res, next) {
   }
 
   const tenant = await Tenant.findOne({ slug }).select("_id slug name color").lean();
+  // Même réponse pour « inconnu » et « non-membre » : on ne révèle pas qu'un tenant existe.
   if (!tenant || !(await allowed(req, tenant))) {
     return res.status(404).json({ error: "Tenant introuvable." });
   }
@@ -40,4 +39,9 @@ async function tenantMiddleware(req, res, next) {
   runWithTenant(tenant, () => next());
 }
 
-module.exports = { tenantMiddleware };
+function requireMemberToWrite(req, res, next) {
+  if (READ_METHODS.has(req.method) || req.user) return next();
+  return res.status(401).json({ error: "auth_required" });
+}
+
+module.exports = { tenantMiddleware, requireMemberToWrite };

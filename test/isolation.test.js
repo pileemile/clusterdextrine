@@ -9,17 +9,29 @@ const app = require("../src/index");
 const Weather = require("../src/models/Weather");
 const User = require("../src/models/User");
 const AbAssignment = require("../src/models/AbAssignment");
-const AuthSession = require("../src/models/AuthSession");
 const { createSession } = require("../src/auth/session");
 const { BOTH, ONLY_A, startDb, stopDb } = require("./helpers");
 
 const READER = "00000000-0000-4000-8000-000000000001";
+const sessions = {};
 
-test.before(startDb);
+async function sessionCookie(email) {
+  if (!sessions[email]) {
+    const user = await User.findOne({ email });
+    sessions[email] = `ciel_session=${await createSession(user._id)}`;
+  }
+  return sessions[email];
+}
+
+test.before(async () => {
+  await startDb();
+  await sessionCookie(BOTH);
+  await sessionCookie(ONLY_A);
+});
 test.after(stopDb);
 
 function as(slug) {
-  return { "X-Tenant": slug, "X-User": BOTH, Cookie: `ciel_lecteur=${READER}` };
+  return { "X-Tenant": slug, Cookie: `ciel_lecteur=${READER}; ${sessions[BOTH]}` };
 }
 
 function post(slug, body) {
@@ -45,19 +57,45 @@ function openStream(port, slug) {
   });
 }
 
-test("le middleware refuse un tenant absent, mal formé, inconnu, ou un non-membre", async () => {
+test("le middleware refuse un tenant absent, mal formé, inconnu, ou un non-membre (session)", async () => {
   assert.equal((await request(app).get("/api/weather")).status, 400);
   assert.equal((await request(app).get("/api/weather").set("X-Tenant", "../x")).status, 400);
 
   const unknown = await request(app).get("/api/weather").set("X-Tenant", "observatoire-z");
   assert.equal(unknown.status, 404);
 
-  const notMember = await request(app).get("/api/weather").set({ "X-Tenant": "observatoire-b", "X-User": ONLY_A });
+  const notMember = await request(app).get("/api/weather").set({ "X-Tenant": "observatoire-b", Cookie: sessions[ONLY_A] });
   assert.equal(notMember.status, 404);
   assert.deepEqual(notMember.body, unknown.body);
 
-  const member = await request(app).get("/api/weather").set({ "X-Tenant": "observatoire-a", "X-User": ONLY_A });
+  const member = await request(app).get("/api/weather").set({ "X-Tenant": "observatoire-a", Cookie: sessions[ONLY_A] });
   assert.equal(member.status, 200);
+});
+
+test("X-User est ignoré : il ne donne ni n'enlève aucun droit", async () => {
+  const notMember = { "X-Tenant": "observatoire-b", Cookie: sessions[ONLY_A] };
+  const withHeader = await request(app).get("/api/weather").set({ ...notMember, "X-User": BOTH });
+  assert.equal(withHeader.status, 404, "X-User ne fait pas entrer un non-membre");
+
+  const anonymousWrite = await request(app)
+    .post("/api/weather")
+    .set({ "X-Tenant": "observatoire-a", "X-User": BOTH })
+    .send({ st: "XUSER", ts: "2026-11-16T07:00:00.000Z" });
+  assert.equal(anonymousWrite.status, 401, "X-User ne remplace pas une session");
+});
+
+test("anonyme : lecture autorisée, écriture refusée (401)", async () => {
+  const anon = { "X-Tenant": "observatoire-a" };
+  assert.equal((await request(app).get("/api/weather").set(anon)).status, 200);
+  assert.equal(
+    (await request(app).post("/api/weather").set(anon).send({ st: "ANON", ts: "2026-11-16T07:30:00.000Z" })).status,
+    401
+  );
+
+  const { body } = await post("observatoire-a", { st: "ANON-CIBLE", ts: "2026-11-16T07:45:00.000Z" });
+  assert.equal((await request(app).put(`/api/weather/${body._id}`).set(anon).send({ st: "PIRATE" })).status, 401);
+  assert.equal((await request(app).delete(`/api/weather/${body._id}`).set(anon)).status, 401);
+  assert.equal((await rawDoc(body._id)).st, "ANON-CIBLE");
 });
 
 test("les routes admin refusent X-User et les utilisateurs ordinaires", async () => {
@@ -68,13 +106,13 @@ test("les routes admin refusent X-User et les utilisateurs ordinaires", async ()
     (await request(app).get("/api/admin/users").set("Cookie", `ciel_session=${regularSession}`)).status,
     403
   );
-  await AuthSession.deleteMany({});
 });
 
 test("la liste des tenants ne montre que ceux de l'utilisateur", async () => {
-  const slugs = async (email) => (await request(app).get("/api/tenants").set("X-User", email)).body.map((t) => t.slug);
-  assert.deepEqual(await slugs(ONLY_A), ["observatoire-a"]);
-  assert.deepEqual(await slugs(BOTH), ["observatoire-a", "observatoire-b"]);
+  const slugs = async (headers) => (await request(app).get("/api/tenants").set(headers)).body.map((t) => t.slug);
+  assert.deepEqual(await slugs({ Cookie: sessions[ONLY_A] }), ["observatoire-a"]);
+  assert.deepEqual(await slugs({ Cookie: sessions[BOTH] }), ["observatoire-a", "observatoire-b"]);
+  assert.deepEqual(await slugs({ "X-User": ONLY_A }), ["observatoire-a", "observatoire-b"]);
 });
 
 test("un relevé créé dans A n'apparaît pas dans la liste de B", async () => {

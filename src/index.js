@@ -11,10 +11,23 @@ const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
-const { tenantMiddleware } = require("./tenant/middleware");
+const { tenantMiddleware, requireMemberToWrite } = require("./tenant/middleware");
 const googleRoutes = require("./routes/googleRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
+const {
+  apiLimiter,
+  writeLimiter,
+  loginLimiter,
+  twoFactorLimiter,
+  telemetryLimiter,
+} = require("./security/rateLimits");
+const { securityHeaders } = require("./security/headers");
+const { finalErrorHandler } = require("./security/errors");
+
+// Documentation de l'API (Swagger et liste des routes) : désactivée par défaut,
+// elle donne à un attaquant la carte de toutes les routes. API_DOCS=on dans .env pour l'activer.
+const API_DOCS = process.env.API_DOCS === "on";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,11 +35,15 @@ const PORT = process.env.PORT || 3000;
 // Le front est servi par ce même process : aucune origine tierce.
 app.use(cors({ origin: false }));
 
+if (API_DOCS) setupSwagger(app);
+app.use(securityHeaders());
 // Même origine que la page : /otlp/ part au collecteur, le préfixe est retiré.
-app.use("/otlp", express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
+app.use("/otlp", telemetryLimiter, express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
   const target = new URL(req.url, endpoint.endsWith("/") ? endpoint : `${endpoint}/`);
   const headers = { ...req.headers, host: target.host };
+  delete headers.cookie;
+  delete headers.authorization;
   if (Buffer.isBuffer(req.body)) headers["content-length"] = String(Buffer.byteLength(req.body));
   const proxyReq = http.request(target, { method: req.method, headers }, (proxyRes) => {
     res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
@@ -50,6 +67,10 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use("/api", apiLimiter, writeLimiter);
+app.use(["/api/google/auth", "/api/google/callback"], loginLimiter);
+app.use("/api/auth/2fa/verify", twoFactorLimiter);
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
@@ -57,7 +78,8 @@ app.get("/c/:slug{/*rest}", (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
 
-app.get("/api", (_req, res) => {
+app.get("/api", (_req, res, next) => {
+  if (!API_DOCS) return next();
   res.json({
     name: "API sample_weatherdata",
     collection: "data",
@@ -88,13 +110,15 @@ app.get("/api", (_req, res) => {
   });
 });
 
-setupSwagger(app);
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/google", googleRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/ab", tenantMiddleware, abRoutes);
-app.use("/api/weather", tenantMiddleware, weatherRoutes);
+app.use("/api/weather", tenantMiddleware, requireMemberToWrite, weatherRoutes);
+
+app.use("/api", (_req, res) => res.status(404).json({ error: "Route introuvable." }));
+app.use(finalErrorHandler);
 
 if (require.main === module) {
   connectDB()
@@ -103,7 +127,7 @@ if (require.main === module) {
       await User.syncIndexes();
       app.listen(PORT, () => {
         console.log(`Front : http://localhost:${PORT}`);
-        console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+        if (API_DOCS) console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
       });
     })
     .catch((err) => {

@@ -8,6 +8,10 @@ const { getTenant } = require("../tenant/context");
 const clients = new Map();
 const HEARTBEAT_MS = 15_000;
 
+const MAX_PER_IP = Number(process.env.SSE_MAX_PER_IP) || 5;
+const MAX_TOTAL = Number(process.env.SSE_MAX_TOTAL) || 200;
+const ipOf = new Map();
+const perIp = new Map();
 function writeEvent(res, { event, data, id }) {
   if (id != null) res.write(`id: ${id}\n`);
   if (event) res.write(`event: ${event}\n`);
@@ -17,6 +21,11 @@ function writeEvent(res, { event, data, id }) {
 function remove(res) {
   if (!clients.has(res)) return;
   clients.delete(res);
+  const ip = ipOf.get(res);
+  ipOf.delete(res);
+  const left = (perIp.get(ip) || 1) - 1;
+  if (left > 0) perIp.set(ip, left);
+  else perIp.delete(ip);
   try {
     res.end();
   } catch {
@@ -41,6 +50,11 @@ function subscribe(req, res) {
     return res;
   }
 
+  const ip = req.ip || req.socket?.remoteAddress || "inconnu";
+  if (clients.size >= MAX_TOTAL || (perIp.get(ip) || 0) >= MAX_PER_IP) {
+    res.status(429).json({ error: "Trop de connexions ouvertes, réessayez plus tard." });
+    return res;
+  }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -48,6 +62,8 @@ function subscribe(req, res) {
   if (typeof res.flushHeaders === "function") res.flushHeaders();
 
   clients.set(res, String(tenant._id));
+  ipOf.set(res, ip);
+  perIp.set(ip, (perIp.get(ip) || 0) + 1);
 
   sendSafe(res, {
     event: "ready",

@@ -4,10 +4,29 @@ const Tenant = require("../models/Tenant");
 const User = require("../models/User");
 const Membership = require("../models/Membership");
 const Weather = require("../models/Weather");
+const weatherEvents = require("../sse/weatherEvents");
 const { requireAdmin } = require("../auth/session");
 
 const router = express.Router();
 router.use(requireAdmin());
+
+router.get("/stats", async (_req, res) => {
+  const [labos, users, memberships, weather, stationIds] = await Promise.all([
+    Tenant.countDocuments(),
+    User.countDocuments(),
+    Membership.countDocuments(),
+    Weather.collection.countDocuments({}),
+    Weather.collection.distinct("st"),
+  ]);
+  res.json({
+    labos,
+    stations: stationIds.filter((st) => st != null && String(st).trim()).length,
+    weather,
+    users,
+    memberships,
+    weatherListeners: weatherEvents.clients.size,
+  });
+});
 
 router.get("/users", async (_req, res) => {
   res.json(await User.find().select("_id email name role createdAt updatedAt").sort({ email: 1 }).lean());

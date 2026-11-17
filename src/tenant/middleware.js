@@ -5,12 +5,12 @@ const { runWithTenant } = require("./context");
 
 const HEADER = "x-tenant";
 const USER_HEADER = "x-user";
-const SSE_PATH = "/weather/events";
+const SSE_PATHS = new Set(["/weather/events", "/events"]);
 
 function readSlug(req) {
   const fromHeader = req.get(HEADER);
   if (fromHeader !== undefined) return fromHeader;
-  if (req.path === SSE_PATH && typeof req.query.tenant === "string") return req.query.tenant;
+  if (SSE_PATHS.has(req.path) && typeof req.query.tenant === "string") return req.query.tenant;
   return undefined;
 }
 async function allowed(req, tenant) {

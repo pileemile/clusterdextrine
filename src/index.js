@@ -93,9 +93,8 @@ app.use("/api/tenants", tenantRoutes);
 app.use("/api/google", googleRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api", tenantMiddleware);
-app.use("/api/ab", abRoutes);
-app.use("/api/weather", weatherRoutes);
+app.use("/api/ab", tenantMiddleware, abRoutes);
+app.use("/api/weather", tenantMiddleware, weatherRoutes);
 
 if (require.main === module) {
   connectDB()

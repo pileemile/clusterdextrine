@@ -15,11 +15,8 @@ const store = createTokenStore();
 const calendar = createCalendar(store);
 const router = express.Router();
 
-function configuredAdmins() {
-  return String(process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+function configuredAdmin() {
+  return String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 }
 
 router.use((_req, res, next) => {
@@ -58,7 +55,7 @@ router.get("/callback", async (req, res) => {
     {
       $set: {
         name: profile.name || profile.email,
-        ...(configuredAdmins().includes(profile.email.toLowerCase()) ? { role: "admin" } : {}),
+        ...(configuredAdmin() === profile.email.toLowerCase() ? { role: "admin" } : {}),
       },
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }

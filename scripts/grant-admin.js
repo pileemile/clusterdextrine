@@ -10,6 +10,14 @@ if (!email || !email.includes("@")) {
 
 connectDB()
   .then(async () => {
+    const configuredAdmin = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    if (!configuredAdmin || email !== configuredAdmin) {
+      throw new Error("Cette adresse ne correspond pas à ADMIN_EMAIL.");
+    }
+    const currentAdmin = await User.findOne({ role: "admin" }).select("email").lean();
+    if (currentAdmin && currentAdmin.email !== email) {
+      throw new Error(`Un seul admin est autorisé : ${currentAdmin.email}`);
+    }
     const user = await User.findOneAndUpdate({ email }, { $set: { role: "admin" } }, { returnDocument: "after" })
       .select("email name role")
       .lean();

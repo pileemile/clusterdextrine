@@ -18,9 +18,7 @@ function show(id, visible) {
 
 async function loadDashboard() {
   const [users, tenants] = await Promise.all([api("/api/admin/users"), api("/api/admin/tenants")]);
-  $("users").innerHTML = users.map((user) =>
-    `<p>${user.email} — ${user.role} <button data-user="${user._id}" data-role="${user.role === "admin" ? "user" : "admin"}">Changer le rôle</button></p>`
-  ).join("");
+  $("users").innerHTML = users.map((user) => `<p>${user.email} — ${user.role}</p>`).join("");
   $("tenants").innerHTML = tenants.map((tenant) =>
     `<p><strong>${tenant.slug}</strong> — <span>${tenant.name}</span>
       <button data-edit="${tenant._id}">Modifier</button>

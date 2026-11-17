@@ -10,6 +10,7 @@ const { setupSwagger } = require("./config/swagger");
 const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
+const tenantRoutes = require("./routes/tenantRoutes");
 const { tenantMiddleware } = require("./tenant/middleware");
 const googleRoutes = require("./routes/googleRoutes");
 
@@ -86,19 +87,24 @@ app.get("/api", (_req, res) => {
 });
 
 setupSwagger(app);
+app.use("/api/tenants", tenantRoutes);
+app.use("/api/google", googleRoutes);
 app.use("/api", tenantMiddleware);
 app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);
-app.use("/api/google", googleRoutes);
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Front : http://localhost:${PORT}`);
-      console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+if (require.main === module) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Front : http://localhost:${PORT}`);
+        console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+      });
+    })
+    .catch((err) => {
+      console.error("Connexion MongoDB échouée:", err.message);
+      process.exit(1);
     });
-  })
-  .catch((err) => {
-    console.error("Connexion MongoDB échouée:", err.message);
-    process.exit(1);
-  });
+}
+
+module.exports = app;

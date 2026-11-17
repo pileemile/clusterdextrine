@@ -302,7 +302,7 @@ const cache = new Map();
 const pending = new Set();
 const state = {
   page: 1,
-  limit: 12,
+  limit: 39,
   sort: "-ts",
   q: "",
   total: 0,

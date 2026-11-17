@@ -6,6 +6,8 @@ const { subscribe, changed } = require("../sse/weatherEvents");
 const { attributeBooking, readVisitorId, wantsMeasure } = require("../services/abService");
 const { applyPdfHeaders, loadReleve, ownedPayload, publicError, readerFrom } = require("../pdf/releve");
 const { NearbyError, nearbyResponse } = require("../geo/nearby");
+const { internalError, writeError } = require("../security/errors");
+const { pickCreate, pickUpdate } = require("../security/weatherInput");
 
 const router = express.Router();
 
@@ -61,7 +63,8 @@ router.get("/", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = {};
-    if (req.query.st) {
+    // Chaîne seulement : ?st=a&st=b donnerait un tableau.
+    if (typeof req.query.st === "string" && req.query.st) {
       filter.st = req.query.st;
     }
 
@@ -135,7 +138,7 @@ router.get("/", async (req, res) => {
       data: items,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Liste des relevés");
   }
 });
 
@@ -169,7 +172,7 @@ router.get("/:id", async (req, res) => {
     }
     res.json(doc);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Lecture d'un relevé");
   }
 });
 
@@ -188,7 +191,12 @@ router.post("/", async (req, res) => {
         }
       }
 
-      const created = await Weather.create(ownedPayload(req.body, readerFrom(req)));
+      const input = pickCreate(req.body);
+      if (!input.st || !input.ts) {
+        res.status(400).json({ error: "Les champs st et ts sont requis." });
+        return;
+      }
+      const created = await Weather.create(ownedPayload(input, readerFrom(req)));
       span.setAttribute("ciel.reading.id", String(created._id));
       changed({ id: created._id, action: "created" });
 
@@ -204,7 +212,7 @@ router.post("/", async (req, res) => {
     } catch (err) {
       span.recordException(err);
       span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
-      if (!res.headersSent) res.status(400).json({ error: err.message });
+      writeError(res, err, "Création d'un relevé", "Ce relevé existe déjà pour cette station et cette heure.");
     } finally {
       span.end();
     }
@@ -218,9 +226,13 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "ID invalide" });
     }
 
+    const changes = pickUpdate(req.body);
+    if (!Object.keys(changes).length) {
+      return res.status(400).json({ error: "Aucune modification valide." });
+    }
     const updated = await Weather.findByIdAndUpdate(
       id,
-      { $set: req.body },
+      { $set: changes },
       { returnDocument: "after", runValidators: false }
     ).lean();
 
@@ -230,7 +242,7 @@ router.put("/:id", async (req, res) => {
     changed({ id: updated._id, action: "updated" });
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    writeError(res, err, "Modification d'un relevé", "Ce relevé existe déjà pour cette station et cette heure.");
   }
 });
 
@@ -248,7 +260,7 @@ router.delete("/:id", async (req, res) => {
     changed({ id: req.params.id, action: "deleted" });
     res.json({ message: "Supprimé", id: req.params.id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Suppression d'un relevé");
   }
 });
 

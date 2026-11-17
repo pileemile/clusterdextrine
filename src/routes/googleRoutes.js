@@ -5,6 +5,7 @@ const { authUrl, exchangeCode, userInfo } = require("../google/oauth");
 const { createTokenStore } = require("../google/tokens");
 const { createCalendar } = require("../google/calendar");
 const { GoogleError } = require("../google/errors");
+const { internalError } = require("../security/errors");
 const User = require("../models/User");
 const { createSession, currentUser, setSessionCookie, requireUser } = require("../auth/session");
 
@@ -114,7 +115,7 @@ router.delete("/events/:id", async (req, res) => {
 
 router.use((err, _req, res, _next) => {
   if (!(err instanceof GoogleError)) {
-    return res.status(500).json({ error: err.message });
+    return internalError(res, err, "Google");
   }
   if (err.retryAfter) res.set("Retry-After", err.retryAfter);
   res.status(err.status).json({ error: err.code });

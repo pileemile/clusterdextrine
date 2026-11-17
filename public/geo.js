@@ -65,10 +65,16 @@ const CielGeo = (function () {
     const key = cacheKey(query);
     if (!key) throw new GeoError("not-found");
     if (cache.has(key)) return cache.get(key);
+    const generation = typeof CielTenant === "undefined" ? null : CielTenant.generation;
     const params = new URLSearchParams({ q: query.trim(), limit: "1" });
     const response = await fetchFn(`${GEOCODER_URL}?${params}`);
     if (response.status === 429) throw new GeoError("busy");
     const feature = (await response.json()).features?.[0];
+    if (generation !== null && generation !== CielTenant.generation) {
+      const error = new Error("Recherche d'adresse annulée.");
+      error.name = "AbortError";
+      throw error;
+    }
     if (!feature || feature.properties.score < MIN_SCORE) throw new GeoError("not-found");
     const [lon, lat] = feature.geometry.coordinates;
     const hit = { lat, lon, label: feature.properties.label, score: feature.properties.score };

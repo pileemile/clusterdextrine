@@ -35,21 +35,21 @@
             <path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" />
             <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" />
           </svg>
-          <span>Ciel</span>
+          <span>ClusterDextrine</span>
         </a>
 
         <nav class="nav" aria-label="Sections">
           <a href="#une" aria-current="page">À la une</a>
           <a href="#releves">Relevés</a>
           <a href="/lieux.html">Mes lieux</a>
+          <a href="/agenda.html">Agenda</a>
         </nav>
 
-        <p class="sse" id="sseStatus" role="status" data-state="connecting" aria-live="polite">
-          <span class="sse__dot" aria-hidden="true"></span>
-          <span class="sse__label">Connexion…</span>
-        </p>
-
         <div class="header__actions">
+          <label class="tenant-picker" for="tenantSelect" hidden>
+            <span>Tenant</span>
+            <select id="tenantSelect" aria-label="Choisir un tenant"></select>
+          </label>
           <label class="search" for="searchInput">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8" />
@@ -162,6 +162,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="/tenant.js" defer></script>
     <script src="/geo.js" defer></script>
     <script src="/nearby.js" defer></script>
     <script src="/releve.js" defer></script>

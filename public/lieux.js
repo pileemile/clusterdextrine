@@ -120,7 +120,7 @@ function readingTemp(doc) {
 function readingHref(doc) {
   const call = String(doc.callLetters || "").trim();
   const key = call.length >= 2 ? call : String(doc.st || "");
-  return key ? `/?q=${encodeURIComponent(key)}` : "/";
+  return CielTenant.url(key ? `/?q=${encodeURIComponent(key)}` : "/");
 }
 
 function weatherCard(doc) {
@@ -134,6 +134,7 @@ function weatherCard(doc) {
 }
 
 async function showCity(city) {
+  const requestGeneration = CielTenant.generation;
   const box = $("#cityWeather");
   $("#saveCity").disabled = !city;
   if (!city) {
@@ -144,20 +145,27 @@ async function showCity(city) {
   box.hidden = false;
   box.innerHTML = `<p class="section__sub">Chargement des relevés proches de ${esc(city.name)}…</p>`;
   try {
-    const res = await fetch(`/api/weather?lat=${city.lat}&lng=${city.lng}&km=400&limit=6&sort=-ts`);
+    const res = await api(`/api/weather?lat=${city.lat}&lng=${city.lng}&km=400&limit=6&sort=-ts`);
     if (!res.ok) throw new Error("chargement");
     const items = (await res.json()).data || [];
+    CielTenant.assertGeneration(requestGeneration);
     if (!items.length) {
       box.innerHTML = `<p class="section__sub">Aucun relevé en ligne à proximité de ${esc(city.name)}.</p>`;
       return;
     }
     box.innerHTML = `<h3>Relevés proches de ${esc(city.name)}</h3><div class="grid">${items.map(weatherCard).join("")}</div>`;
   } catch {
+    if (requestGeneration !== CielTenant.generation) return;
     box.innerHTML = `<p class="section__sub">Impossible de charger les relevés.</p>`;
   }
 }
 
 citySelect.addEventListener("change", () => showCity(cityByName(citySelect.value)));
+
+document.addEventListener("tenantchange", () => {
+  $("#cityWeather").hidden = true;
+  $("#cityWeather").innerHTML = "";
+});
 
 $("#saveCity").addEventListener("click", () => {
   const city = cityByName(citySelect.value);
@@ -165,6 +173,9 @@ $("#saveCity").addEventListener("click", () => {
   const result = CielPlaces.save({ name: city.name, lat: city.lat, lng: city.lng });
   toast(result.created ? "Ville enregistrée." : "Cette ville est déjà dans tes lieux.");
   render();
+  document.querySelectorAll('a[href="/"], a[href="/#releves"]').forEach((link) => {
+    link.href = CielTenant.url(link.getAttribute("href"));
+  });
 });
 
 document.addEventListener("click", (e) => {

@@ -59,7 +59,7 @@ function variantFor(visitorId) {
 }
 
 function cookieHeader(visitorId) {
-  return `${COOKIE}=${encodeURIComponent(visitorId)}; Path=/; Max-Age=${COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`;
+  return `${COOKIE}=${encodeURIComponent(visitorId)}; Path=/; Max-Age=${COOKIE_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
 }
 
 function resolveVisitor(req) {
@@ -180,6 +180,7 @@ module.exports = {
   isEnabled,
   variantFor,
   cookieHeader,
+  readCookie,
   resolveVisitor,
   readVisitorId,
   wantsMeasure,

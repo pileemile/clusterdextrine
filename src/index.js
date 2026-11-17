@@ -10,6 +10,11 @@ const { setupSwagger } = require("./config/swagger");
 const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
+const tenantRoutes = require("./routes/tenantRoutes");
+const { tenantMiddleware } = require("./tenant/middleware");
+const googleRoutes = require("./routes/googleRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +53,10 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+app.get("/c/:slug{/*rest}", (_req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+});
+
 app.get("/api", (_req, res) => {
   res.json({
     name: "API sample_weatherdata",
@@ -64,6 +73,13 @@ app.get("/api", (_req, res) => {
       abAssignment: "GET /api/ab/assignment",
       abExposure: "POST /api/ab/exposure",
       abMetrics: "GET /api/ab/metrics",
+      googleAuth: "GET /api/google/auth",
+      googleStatus: "GET /api/google/status",
+      googleDisconnect: "DELETE /api/google/disconnect",
+      googleEvents: "GET /api/google/events?timeMin=&timeMax=",
+      googleCreateEvent: "POST /api/google/events",
+      googleUpdateEvent: "PATCH /api/google/events/:id",
+      googleDeleteEvent: "DELETE /api/google/events/:id",
     },
     swagger: {
       ui: "/api-docs",
@@ -73,17 +89,25 @@ app.get("/api", (_req, res) => {
 });
 
 setupSwagger(app);
-app.use("/api/ab", abRoutes);
-app.use("/api/weather", weatherRoutes);
+app.use("/api/tenants", tenantRoutes);
+app.use("/api/google", googleRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/ab", tenantMiddleware, abRoutes);
+app.use("/api/weather", tenantMiddleware, weatherRoutes);
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Front : http://localhost:${PORT}`);
-      console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+if (require.main === module) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Front : http://localhost:${PORT}`);
+        console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);
+      });
+    })
+    .catch((err) => {
+      console.error("Connexion MongoDB échouée:", err.message);
+      process.exit(1);
     });
-  })
-  .catch((err) => {
-    console.error("Connexion MongoDB échouée:", err.message);
-    process.exit(1);
-  });
+}
+
+module.exports = app;

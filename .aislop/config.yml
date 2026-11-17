@@ -1,0 +1,42 @@
+engines:
+  format: false
+  lint: false
+  code-quality: true
+  ai-slop: true
+  architecture: false
+  security: true
+
+quality:
+  knip: off
+  maxFileLoc: 2000
+  maxFunctionLoc: 180
+
+# Contenu dynamique du front passé par esc() avant innerHTML.
+rules:
+  security/innerhtml: off
+
+imports:
+  provided:
+    - k6
+
+ci:
+  failBelow: 85
+  failOnMissingTools: false
+
+telemetry:
+  enabled: false
+
+exclude:
+  - "**/migrations/**"
+  - "**/www/**"
+  - "**/android/**"
+  - "**/ios/**"
+  - "**/.angular/**"
+  - "**/venv/**"
+  - "**/.venv/**"
+  - "**/*.min.js"
+  - "node_modules/**"
+  - "public/tracing.js"
+  - "public/agenda.min.js"
+  - "k6-report.*"
+  - "rapport.html"

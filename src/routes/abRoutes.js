@@ -10,8 +10,8 @@ router.use((_req, res, next) => {
 
 router.get("/assignment", async (req, res) => {
   try {
-    const { visitorId, fresh } = ab.resolveVisitor(req);
-    if (ab.isEnabled() && fresh) {
+    const { visitorId } = ab.resolveVisitor(req);
+    if (ab.isEnabled()) {
       res.set("Set-Cookie", ab.cookieHeader(visitorId));
     }
     res.json(await ab.assign(visitorId));

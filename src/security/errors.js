@@ -3,10 +3,17 @@
  * serveur, le client ne reçoit qu'un message générique.
  */
 
+const { log } = require("../services/adminLog");
+
 const CLIENT_ERRORS = new Set(["ValidationError", "CastError", "StrictModeError", "BSONError"]);
 
 function internalError(res, err, context) {
   console.error(`${context} :`, err);
+  log({
+    level: "error",
+    action: "erreur",
+    detail: `${context} — ${err?.message || err}`.slice(0, 500),
+  });
   if (!res.headersSent) res.status(500).json({ error: "Erreur interne." });
 }
 

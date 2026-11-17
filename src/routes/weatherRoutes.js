@@ -8,6 +8,7 @@ const { applyPdfHeaders, loadReleve, ownedPayload, publicError, readerFrom } = r
 const { NearbyError, nearbyResponse } = require("../geo/nearby");
 const { internalError, writeError } = require("../security/errors");
 const { pickCreate, pickUpdate } = require("../security/weatherInput");
+const { log, whoFrom } = require("../services/adminLog");
 
 const router = express.Router();
 
@@ -199,6 +200,11 @@ router.post("/", async (req, res) => {
       const created = await Weather.create(ownedPayload(input, readerFrom(req)));
       span.setAttribute("ciel.reading.id", String(created._id));
       changed({ id: created._id, action: "created" });
+      log({
+        action: "releve_cree",
+        who: whoFrom(req),
+        detail: `Station ${created.st || "?"} · ${created._id}`,
+      });
 
       if (wantsMeasure(req)) {
         try {
@@ -240,6 +246,11 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ error: "Rapport météo introuvable" });
     }
     changed({ id: updated._id, action: "updated" });
+    log({
+      action: "releve_modifie",
+      who: whoFrom(req),
+      detail: `Station ${updated.st || "?"} · ${updated._id}`,
+    });
     res.json(updated);
   } catch (err) {
     writeError(res, err, "Modification d'un relevé", "Ce relevé existe déjà pour cette station et cette heure.");
@@ -258,6 +269,11 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Rapport météo introuvable" });
     }
     changed({ id: req.params.id, action: "deleted" });
+    log({
+      action: "releve_supprime",
+      who: whoFrom(req),
+      detail: `Station ${deleted.st || "?"} · ${req.params.id}`,
+    });
     res.json({ message: "Supprimé", id: req.params.id });
   } catch (err) {
     internalError(res, err, "Suppression d'un relevé");

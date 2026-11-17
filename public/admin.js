@@ -78,6 +78,7 @@ async function setTab(name) {
     memberships: "Appartenances",
     tenants: "Tenants",
     weather: "Relevés",
+    logs: "Journal",
   };
   $$("#adminNav [data-tab]").forEach((btn) => {
     btn.setAttribute("aria-pressed", String(btn.dataset.tab === name));
@@ -89,6 +90,13 @@ async function setTab(name) {
   if (name === "weather" && !$("weatherTable").childElementCount) {
     try {
       renderWeather(await api("/api/admin/weather"));
+    } catch (error) {
+      report(error);
+    }
+  }
+  if (name === "logs") {
+    try {
+      renderLogs(await api("/api/admin/logs"));
     } catch (error) {
       report(error);
     }
@@ -230,6 +238,35 @@ function renderWeather(rows) {
               <td class="admin__actions">
                 <button class="btn" type="button" data-delete-weather="${esc(id)}">Supprimer</button>
               </td>
+            </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderLogs(rows) {
+  if (!rows.length) {
+    $("logsTable").innerHTML = `<div class="empty"><h3>Aucun événement</h3><p>Les connexions, relevés et actions admin apparaîtront ici.</p></div>`;
+    return;
+  }
+  $("logsTable").innerHTML = `
+    <table class="admin__table">
+      <thead><tr><th>Date</th><th>Niveau</th><th>Action</th><th>Qui</th><th>Détail</th></tr></thead>
+      <tbody>
+        ${rows
+          .map((row) => {
+            const level = row.level || "info";
+            const badge =
+              level === "error" ? "admin__badge admin__badge--error" : level === "warn" ? "admin__badge admin__badge--warn" : "admin__badge";
+            const at = row.at ? new Date(row.at).toLocaleString("fr-FR") : "—";
+            return `
+            <tr>
+              <td>${esc(at)}</td>
+              <td><span class="${badge}">${esc(level)}</span></td>
+              <td><code>${esc(row.action)}</code></td>
+              <td>${esc(row.who || "—")}</td>
+              <td>${esc(row.detail || "")}</td>
             </tr>`;
           })
           .join("")}
@@ -469,6 +506,15 @@ $("refreshWeather").addEventListener("click", async () => {
   try {
     renderWeather(await api("/api/admin/weather"));
     await refreshStats();
+  } catch (error) {
+    report(error);
+  }
+});
+
+$("refreshLogs").addEventListener("click", async () => {
+  clearError();
+  try {
+    renderLogs(await api("/api/admin/logs"));
   } catch (error) {
     report(error);
   }

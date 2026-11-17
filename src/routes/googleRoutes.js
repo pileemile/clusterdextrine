@@ -8,6 +8,7 @@ const { GoogleError } = require("../google/errors");
 const { internalError } = require("../security/errors");
 const User = require("../models/User");
 const { createSession, currentUser, setSessionCookie, requireUser } = require("../auth/session");
+const { log } = require("../services/adminLog");
 
 const STATE_COOKIE = "google_state";
 const NEXT_COOKIE = "google_next";
@@ -53,13 +54,18 @@ router.get("/callback", async (req, res) => {
   res.append("Set-Cookie", `${STATE_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
   res.append("Set-Cookie", `${NEXT_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
 
-  if (error) return res.redirect(`${next}?google=refused`);
+  if (error) {
+    log({ level: "warn", action: "login_refuse", detail: "Google a refusé la connexion" });
+    return res.redirect(`${next}?google=refused`);
+  }
   if (!expected || state !== expected || typeof code !== "string") {
+    log({ level: "warn", action: "login_refuse", detail: "État OAuth invalide" });
     return res.status(400).json({ error: "invalid_state" });
   }
   const tokens = await exchangeCode(code);
   const profile = await userInfo(tokens.access_token);
   if (!profile.email || profile.email_verified === false) {
+    log({ level: "warn", action: "login_refuse", detail: "E-mail Google manquant ou non vérifié" });
     return res.status(403).json({ error: "google_email_required" });
   }
   const user = await User.findOneAndUpdate(
@@ -69,6 +75,7 @@ router.get("/callback", async (req, res) => {
   ).lean();
   await store.save(String(user._id), tokens);
   setSessionCookie(res, await createSession(user._id));
+  log({ action: "login", who: user.email, detail: `Connexion Google → ${next}` });
   res.redirect(`${next}?google=connected`);
 });
 

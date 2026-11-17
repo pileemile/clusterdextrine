@@ -2117,6 +2117,16 @@ a.card {
   font-weight: 500;
 }
 
+.admin__badge--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.admin__badge--error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .admin__swatch {
   display: inline-block;
   width: 14px;

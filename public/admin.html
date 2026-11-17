@@ -41,6 +41,7 @@
           <button type="button" data-tab="memberships" aria-pressed="false">Appartenances</button>
           <button type="button" data-tab="tenants" aria-pressed="false">Tenants</button>
           <button type="button" data-tab="weather" aria-pressed="false">Relevés</button>
+          <button type="button" data-tab="logs" aria-pressed="false">Journal</button>
         </nav>
 
         <div class="admin-side__foot">
@@ -207,6 +208,15 @@
             </div>
             <p class="admin__hint">Jusqu’à 1000 documents, y compris les exemples partagés.</p>
             <div class="admin__table-wrap" id="weatherTable"></div>
+          </section>
+
+          <section class="admin__pane" data-pane="logs" hidden>
+            <div class="admin__toolbar">
+              <h2>Journal</h2>
+              <button class="btn" type="button" id="refreshLogs">Actualiser</button>
+            </div>
+            <p class="admin__hint">200 derniers événements (auth, admin, relevés, erreurs).</p>
+            <div class="admin__table-wrap" id="logsTable"></div>
           </section>
         </div>
       </div>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Interdit les push directs sur main et dev : PR obligatoire + check "aislop" vert.
+# Interdit les push directs sur main et dev : PR obligatoire + checks aislop, tests, semgrep et npm-audit verts.
 # Usage : bash scripts/setup-branch-protection.sh owner/repo   (nécessite gh authentifié, admin du repo)
 set -euo pipefail
 
@@ -35,7 +35,12 @@ PAYLOAD=$(cat <<JSON
       "type": "required_status_checks",
       "parameters": {
         "strict_required_status_checks_policy": true,
-        "required_status_checks": [{ "context": "aislop" }]
+        "required_status_checks": [
+          { "context": "aislop" },
+          { "context": "tests" },
+          { "context": "semgrep" },
+          { "context": "npm-audit" }
+        ]
       }
     }
   ]

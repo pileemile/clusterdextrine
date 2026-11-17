@@ -1991,7 +1991,7 @@ a.card {
 .admin__form {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 12px 14px;
   align-items: end;
   margin-bottom: 16px;
   padding: 14px;
@@ -2002,16 +2002,19 @@ a.card {
 
 .admin__form .field {
   margin: 0;
-  flex: 1 1 200px;
+  flex: 1 1 180px;
   min-width: 0;
-  max-width: 320px;
+  max-width: 280px;
 }
 
 .admin__form > .btn {
   flex: 0 0 auto;
+  align-self: end;
   width: auto;
+  min-width: 0;
+  height: 36px;
   min-height: 36px;
-  padding-inline: 16px;
+  padding: 0 14px;
   white-space: nowrap;
 }
 
@@ -2155,8 +2158,14 @@ a.card {
   }
 
   .admin__form .field {
-    flex: 1 1 100%;
+    flex: 1 1 calc(50% - 7px);
     max-width: none;
+  }
+
+  .admin__form > .btn {
+    flex: 0 0 auto;
+    align-self: start;
+    width: auto;
   }
 
   .admin__stats {

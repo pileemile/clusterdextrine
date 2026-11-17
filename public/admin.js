@@ -13,6 +13,7 @@ const ERRORS = {
   last_admin: "Impossible de retirer le dernier administrateur.",
   tenant_exists: "Ce slug existe déjà.",
   invalid_tenant: "Slug ou nom invalide.",
+  "En-tête X-Tenant manquant.": "Session admin hors tenant : rechargez la page.",
 };
 
 let cache = { users: [], tenants: [], memberships: [], stats: null };

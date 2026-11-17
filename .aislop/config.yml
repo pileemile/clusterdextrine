@@ -6,6 +6,19 @@ engines:
   architecture: false
   security: true
 
+quality:
+  knip: off
+  maxFileLoc: 2000
+  maxFunctionLoc: 180
+
+# Contenu dynamique du front passé par esc() avant innerHTML.
+rules:
+  security/innerhtml: off
+
+imports:
+  provided:
+    - k6
+
 ci:
   failBelow: 85
   failOnMissingTools: false

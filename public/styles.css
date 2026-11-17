@@ -232,49 +232,6 @@ svg {
   line-height: var(--control);
 }
 
-.sse {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  gap: 8px;
-  margin: 0 4px 0 0;
-  padding: 0 12px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--paper);
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.sse__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-
-.sse[data-state="connected"] {
-  color: var(--sky-deep);
-  border-color: #b7d9ea;
-  background: #eef7fb;
-}
-
-.sse[data-state="connected"] .sse__dot {
-  background: var(--sky);
-}
-
-.sse[data-state="interrupted"] {
-  color: #8a3b2a;
-  border-color: #efc9bf;
-  background: #fff4f1;
-}
-
-.sse[data-state="interrupted"] .sse__dot {
-  background: #c45a3e;
-}
-
 .search {
   display: flex;
   align-items: center;
@@ -1655,6 +1612,7 @@ a.card {
   font-weight: 500;
 }
 
+/* aislop-ignore-next-line ai-slop/unused-css -- FullCalendar injects .fc-event */
 .agenda .fc-event {
   cursor: pointer;
 }
@@ -1709,11 +1667,13 @@ a.card {
     padding: 8px;
   }
 
+  /* aislop-ignore-next-line ai-slop/unused-css -- FullCalendar injects .fc-toolbar */
   .agenda .fc .fc-toolbar {
     flex-direction: column;
     gap: 8px;
   }
 
+  /* aislop-ignore-next-line ai-slop/unused-css -- FullCalendar injects .fc-toolbar-title */
   .agenda .fc .fc-toolbar-title {
     font-size: 18px;
   }

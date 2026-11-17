@@ -7,7 +7,10 @@ const mongoose = require("mongoose");
 const request = require("supertest");
 const app = require("../src/index");
 const Weather = require("../src/models/Weather");
+const User = require("../src/models/User");
 const AbAssignment = require("../src/models/AbAssignment");
+const AuthSession = require("../src/models/AuthSession");
+const { createSession } = require("../src/auth/session");
 const { BOTH, ONLY_A, startDb, stopDb } = require("./helpers");
 
 const READER = "00000000-0000-4000-8000-000000000001";
@@ -55,6 +58,17 @@ test("le middleware refuse un tenant absent, mal formé, inconnu, ou un non-memb
 
   const member = await request(app).get("/api/weather").set({ "X-Tenant": "observatoire-a", "X-User": ONLY_A });
   assert.equal(member.status, 200);
+});
+
+test("les routes admin refusent X-User et les utilisateurs ordinaires", async () => {
+  assert.equal((await request(app).get("/api/admin/users").set("X-User", BOTH)).status, 401);
+  const regular = await User.findOne({ email: BOTH });
+  const regularSession = await createSession(regular._id);
+  assert.equal(
+    (await request(app).get("/api/admin/users").set("Cookie", `ciel_session=${regularSession}`)).status,
+    403
+  );
+  await AuthSession.deleteMany({});
 });
 
 test("la liste des tenants ne montre que ceux de l'utilisateur", async () => {

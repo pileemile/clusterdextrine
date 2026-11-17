@@ -3,7 +3,7 @@ const { GoogleError } = require("./errors");
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
-const SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const SCOPE = "openid email profile https://www.googleapis.com/auth/calendar.events";
 const FORM = { "Content-Type": "application/x-www-form-urlencoded" };
 
 function authUrl(state) {
@@ -49,8 +49,16 @@ function refreshAccessToken(refreshToken) {
   return postToken({ refresh_token: refreshToken, grant_type: "refresh_token" });
 }
 
+async function userInfo(accessToken) {
+  const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new GoogleError("google_error", 502);
+  return res.json();
+}
+
 async function revoke(token) {
   await fetch(REVOKE_URL, { method: "POST", headers: FORM, body: new URLSearchParams({ token }) });
 }
 
-module.exports = { authUrl, exchangeCode, refreshAccessToken, revoke };
+module.exports = { authUrl, exchangeCode, refreshAccessToken, revoke, userInfo };

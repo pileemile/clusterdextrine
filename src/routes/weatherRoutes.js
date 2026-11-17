@@ -221,7 +221,7 @@ router.put("/:id", async (req, res) => {
     const updated = await Weather.findByIdAndUpdate(
       id,
       { $set: req.body },
-      { new: true, runValidators: false }
+      { returnDocument: "after", runValidators: false }
     ).lean();
 
     if (!updated) {

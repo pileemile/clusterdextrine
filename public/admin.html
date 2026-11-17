@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administration Ciel</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page">
+    <h1>Administration Ciel</h1>
+    <p id="message">Vérification de la session…</p>
+    <p id="error" role="alert" hidden></p>
+    <p><a id="login" href="/api/google/auth" hidden>Se connecter avec Google</a></p>
+    <section id="two-factor" hidden>
+      <h2>Activer la double authentification</h2>
+      <button id="enroll">Générer le secret TOTP</button>
+      <img id="qr" alt="QR code TOTP" hidden width="220" height="220">
+      <pre id="secret"></pre>
+      <label>Code de l’application <input id="code" inputmode="numeric" autocomplete="one-time-code"></label>
+      <button id="verify">Valider</button>
+      <pre id="recovery"></pre>
+    </section>
+    <section id="dashboard" hidden>
+      <h2>Utilisateurs</h2>
+      <div id="users"></div>
+      <h2>Tenants</h2>
+      <form id="tenant-form">
+        <input name="slug" placeholder="slug" required pattern="[a-z0-9-]{2,40}">
+        <input name="name" placeholder="Nom" required>
+        <button>Créer</button>
+      </form>
+      <div id="tenants"></div>
+    </section>
+  </main>
+  <script src="/admin.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@
     "loadtest:ci": "K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=rapport.html VUS=20 DURATION=20s k6 run loadtest.js",
     "test": "node --test",
     "seed": "node scripts/seed-tenants.js",
+    "admin:grant": "node scripts/grant-admin.js",
     "e2e": "cypress run",
     "tracing:build": "esbuild otel-web/tracing-entry.js --bundle --format=iife --outfile=public/tracing.js --platform=browser",
     "agenda:build": "npm --prefix agenda-web ci && agenda-web/node_modules/.bin/esbuild agenda-web/main.js --bundle --minify --format=iife --outfile=public/agenda.min.js --platform=browser --alias:vue=./agenda-web/node_modules/vue/dist/vue.esm-bundler.js --define:process.env.NODE_ENV=\\\"production\\\" --define:__VUE_OPTIONS_API__=true --define:__VUE_PROD_DEVTOOLS__=false --define:__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false",
@@ -31,6 +32,7 @@
     "mongoose": "^9.11.1",
     "pdfkit": "^0.20.2",
     "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {

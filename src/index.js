@@ -13,6 +13,8 @@ const abRoutes = require("./routes/abRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
 const { tenantMiddleware } = require("./tenant/middleware");
 const googleRoutes = require("./routes/googleRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +91,8 @@ app.get("/api", (_req, res) => {
 setupSwagger(app);
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/google", googleRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api", tenantMiddleware);
 app.use("/api/ab", abRoutes);
 app.use("/api/weather", weatherRoutes);

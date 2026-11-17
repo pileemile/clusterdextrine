@@ -28,6 +28,43 @@ Hors middleware : `/api-docs`, `/otlp`, `/api/tenants`, `/api/google`.
 
 Middleware : absent / mal formé → 400 · inconnu / non-membre (`X-User`) → 404 `Tenant introuvable.` · sinon `runWithTenant(tenant, next)`.
 
+## 3. Administration
+
+L'identité d'un administrateur est établie par Google OAuth, puis conservée
+dans une session serveur (`ciel_session`). `X-User` reste uniquement un
+mécanisme de compatibilité pour les démonstrations et ne donne aucun accès
+administrateur.
+
+Après la première connexion Google de l'utilisateur, un administrateur existant
+peut lui accorder le rôle :
+
+```bash
+npm run admin:grant -- admin@example.com
+```
+
+Les routes `/api/admin/*` répondent `401` sans session et `403` aux utilisateurs
+non administrateurs. Elles permettent de gérer les utilisateurs,
+appartenances, tenants et relevés. Un administrateur ne peut pas retirer son
+propre rôle.
+
+### 2FA administrateur
+
+Un administrateur doit activer TOTP après sa première connexion Google :
+
+```http
+POST /api/auth/2fa/enroll
+POST /api/auth/2fa/verify
+Content-Type: application/json
+
+{"code":"123456"}
+```
+
+La première réponse fournit l'URL `otpauth://` à importer dans une application
+d'authentification. La vérification renvoie dix codes de récupération : ils
+doivent être conservés hors de l'application. Chaque code est utilisable une
+seule fois. Tant que le TOTP n'est pas activé ou validé dans la session,
+`/api/admin/*` reste inaccessible.
+
 Plugin : lectures filtrées (+ docs sans `tenantId` pour `Weather`) · écritures filtrées · `save` pose `tenantId` · `aggregate` → `$match` en tête · sans contexte → erreur.
 
 ## 3. Changement de tenant

@@ -9,10 +9,11 @@ const ERRORS = {
   two_factor_already_enabled: "La double authentification est déjà active.",
   two_factor_not_enrolled: "Générez d’abord le QR code.",
   invalid_two_factor_code: "Code invalide.",
-  single_admin_only: "Un seul administrateur est autorisé.",
   cannot_demote_self: "Vous ne pouvez pas retirer votre propre rôle.",
+  last_admin: "Impossible de retirer le dernier administrateur.",
   tenant_exists: "Ce slug existe déjà.",
   invalid_tenant: "Slug ou nom invalide.",
+  "En-tête X-Tenant manquant.": "Session admin hors tenant : rechargez la page.",
 };
 
 let cache = { users: [], tenants: [], memberships: [], stats: null };
@@ -110,26 +111,32 @@ function renderUsers() {
     $("usersTable").innerHTML = `<div class="empty"><h3>Aucun utilisateur</h3></div>`;
     return;
   }
+  const selfId = cache.selfId || "";
   $("usersTable").innerHTML = `
     <table class="admin__table">
       <thead><tr><th>E-mail</th><th>Nom</th><th>Rôle</th><th></th></tr></thead>
       <tbody>
         ${cache.users
-          .map(
-            (user) => `
+          .map((user) => {
+            const id = esc(user._id);
+            const isSelf = String(user._id) === String(selfId);
+            const roleBtn =
+              user.role === "admin"
+                ? isSelf
+                  ? ""
+                  : `<button class="btn" type="button" data-role="${id}" data-next-role="user">Retirer admin</button>`
+                : `<button class="btn" type="button" data-role="${id}" data-next-role="admin">Promouvoir admin</button>`;
+            return `
           <tr>
             <td>${esc(user.email)}</td>
             <td>${esc(user.name || "—")}</td>
             <td><span class="admin__badge">${esc(user.role)}</span></td>
             <td class="admin__actions">
-              ${
-                user.role === "admin"
-                  ? ""
-                  : `<button class="btn" type="button" data-rename="${esc(user._id)}">Renommer</button>`
-              }
+              <button class="btn" type="button" data-rename="${id}">Renommer</button>
+              ${roleBtn}
             </td>
-          </tr>`
-          )
+          </tr>`;
+          })
           .join("")}
       </tbody>
     </table>`;
@@ -237,7 +244,7 @@ async function loadDashboard() {
     api("/api/admin/memberships"),
     api("/api/admin/stats"),
   ]);
-  cache = { users, tenants, memberships, stats };
+  cache = { ...cache, users, tenants, memberships, stats };
   renderStats(stats);
   renderUsers();
   renderMemberships();
@@ -267,6 +274,7 @@ async function start() {
   clearError();
   try {
     const user = await api("/api/google/me");
+    cache.selfId = user._id;
     $("adminWho").textContent = user.email;
     $("adminSub").textContent = "Backoffice : utilisateurs, tenants, appartenances et relevés.";
 
@@ -351,16 +359,28 @@ $("refreshUsers").addEventListener("click", async () => {
 });
 
 $("usersTable").addEventListener("click", async (event) => {
-  const btn = event.target.closest("[data-rename]");
-  if (!btn) return;
-  const name = window.prompt("Nouveau nom :");
-  if (!name) return;
+  const rename = event.target.closest("[data-rename]");
+  const roleBtn = event.target.closest("[data-role]");
   clearError();
   try {
-    await api(`/api/admin/users/${btn.dataset.rename}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name }),
-    });
+    if (rename) {
+      const name = window.prompt("Nouveau nom :");
+      if (!name) return;
+      await api(`/api/admin/users/${rename.dataset.rename}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+    } else if (roleBtn) {
+      const next = roleBtn.dataset.nextRole;
+      const label = next === "admin" ? "Promouvoir cet utilisateur administrateur ?" : "Retirer le rôle administrateur ?";
+      if (!window.confirm(label)) return;
+      await api(`/api/admin/users/${roleBtn.dataset.role}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: next }),
+      });
+    } else {
+      return;
+    }
     cache.users = await api("/api/admin/users");
     renderUsers();
   } catch (error) {

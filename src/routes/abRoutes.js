@@ -1,5 +1,6 @@
 const express = require("express");
 const ab = require("../services/abService");
+const { internalError } = require("../security/errors");
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.get("/assignment", async (req, res) => {
     }
     res.json(await ab.assign(visitorId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Affectation A/B");
   }
 });
 
@@ -25,7 +26,7 @@ router.post("/exposure", async (req, res) => {
     await ab.expose(ab.readVisitorId(req));
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Exposition A/B");
   }
 });
 
@@ -33,7 +34,7 @@ router.get("/metrics", async (req, res) => {
   try {
     res.json(await ab.metrics());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    internalError(res, err, "Métriques A/B");
   }
 });
 

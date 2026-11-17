@@ -38,6 +38,18 @@ const USERS = [
   { email: "autre@clusterdextrine.test", name: "Membre des Alpes", tenants: ["observatoire-alpes"] },
 ];
 
+// Votre propre compte Google, lu dans .env (jamais commité) : pas de donnée réelle dans le code.
+// SEED_MY_EMAIL=vous@gmail.com   SEED_MY_TENANTS=observatoire-alpes,station-littoral
+const MY_EMAIL = String(process.env.SEED_MY_EMAIL || "").trim().toLowerCase();
+if (MY_EMAIL) {
+  const known = new Set(TENANTS.map((t) => t.slug));
+  const slugs = String(process.env.SEED_MY_TENANTS || "observatoire-alpes")
+    .split(",")
+    .map((slug) => slug.trim())
+    .filter((slug) => known.has(slug));
+  USERS.push({ email: MY_EMAIL, name: MY_EMAIL.split("@")[0], tenants: slugs });
+}
+
 async function seedUsers(tenants) {
   const idBySlug = new Map(tenants.map((t) => [t.slug, t._id]));
   const result = [];

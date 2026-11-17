@@ -36,11 +36,14 @@ router.patch("/users/:id", async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "invalid_user_id" });
   const updates = {};
   if (typeof req.body?.name === "string" && req.body.name.trim()) updates.name = req.body.name.trim();
-  if (req.body?.role === "admin") return res.status(409).json({ error: "single_admin_only" });
-  if (req.body?.role === "user") updates.role = req.body.role;
+  if (req.body?.role === "admin" || req.body?.role === "user") updates.role = req.body.role;
   if (!Object.keys(updates).length) return res.status(400).json({ error: "no_valid_changes" });
   if (req.params.id === String(req.user._id) && updates.role === "user") {
     return res.status(400).json({ error: "cannot_demote_self" });
+  }
+  if (updates.role === "user") {
+    const admins = await User.countDocuments({ role: "admin", _id: { $ne: req.params.id } });
+    if (!admins) return res.status(400).json({ error: "last_admin" });
   }
   const user = await User.findByIdAndUpdate(req.params.id, { $set: updates }, { returnDocument: "after" })
     .select("_id email name role")

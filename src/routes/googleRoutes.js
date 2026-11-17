@@ -5,25 +5,27 @@ const { authUrl, exchangeCode, userInfo } = require("../google/oauth");
 const { createTokenStore } = require("../google/tokens");
 const { createCalendar } = require("../google/calendar");
 const { GoogleError } = require("../google/errors");
+const { internalError } = require("../security/errors");
 const User = require("../models/User");
 const { createSession, currentUser, setSessionCookie, requireUser } = require("../auth/session");
 
 const STATE_COOKIE = "google_state";
 const NEXT_COOKIE = "google_next";
 const STATE_ATTRS = "Path=/api/google; HttpOnly; Secure; SameSite=Lax";
-const ALLOWED_NEXT = new Set(["/agenda.html", "/admin.html"]);
+const ALLOWED_NEXT = new Set(["/", "/agenda.html", "/admin.html"]);
+const TENANT_PAGE = /^\/c\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/;
+
+function isAllowedNext(value) {
+  return ALLOWED_NEXT.has(value) || TENANT_PAGE.test(value);
+}
 
 const store = createTokenStore();
 const calendar = createCalendar(store);
 const router = express.Router();
 
-function configuredAdmin() {
-  return String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-}
-
 function nextPath(req) {
   const value = String(req.query.next || "");
-  return ALLOWED_NEXT.has(value) ? value : "/agenda.html";
+  return isAllowedNext(value) ? value : "/agenda.html";
 }
 
 router.use((_req, res, next) => {
@@ -47,7 +49,7 @@ router.get("/callback", async (req, res) => {
   const { code, state, error } = req.query;
   const expected = ab.readCookie(req, STATE_COOKIE);
   const nextRaw = ab.readCookie(req, NEXT_COOKIE);
-  const next = ALLOWED_NEXT.has(nextRaw || "") ? nextRaw : "/agenda.html";
+  const next = isAllowedNext(nextRaw || "") ? nextRaw : "/agenda.html";
   res.append("Set-Cookie", `${STATE_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
   res.append("Set-Cookie", `${NEXT_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
 
@@ -62,12 +64,7 @@ router.get("/callback", async (req, res) => {
   }
   const user = await User.findOneAndUpdate(
     { email: profile.email.toLowerCase() },
-    {
-      $set: {
-        name: profile.name || profile.email,
-        ...(configuredAdmin() === profile.email.toLowerCase() ? { role: "admin" } : {}),
-      },
-    },
+    { $set: { name: profile.name || profile.email } },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   ).lean();
   await store.save(String(user._id), tokens);
@@ -118,7 +115,7 @@ router.delete("/events/:id", async (req, res) => {
 
 router.use((err, _req, res, _next) => {
   if (!(err instanceof GoogleError)) {
-    return res.status(500).json({ error: err.message });
+    return internalError(res, err, "Google");
   }
   if (err.retryAfter) res.set("Retry-After", err.retryAfter);
   res.status(err.status).json({ error: err.code });

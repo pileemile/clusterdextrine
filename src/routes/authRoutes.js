@@ -1,12 +1,17 @@
 const express = require("express");
 const QRCode = require("qrcode");
 const User = require("../models/User");
-const { requireUser, markTwoFactorVerified } = require("../auth/session");
+const { requireUser, markTwoFactorVerified, destroySession } = require("../auth/session");
 const { randomSecret, verifyCode, recoveryCode, hashRecoveryCode } = require("../auth/totp");
 const { seal, open } = require("../google/crypto");
 
 const router = express.Router();
 router.use(requireUser());
+
+router.post("/logout", async (req, res) => {
+  await destroySession(req, res);
+  res.status(204).end();
+});
 
 router.post("/2fa/enroll", async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "admin_required" });

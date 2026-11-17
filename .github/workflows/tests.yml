@@ -1,0 +1,87 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    # Ce nom est un status check exigé par le ruleset (scripts/setup-branch-protection.sh).
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            otel-web/package-lock.json
+
+      # Binaire MongoDB téléchargé par mongodb-memory-server.
+      - name: Cache MongoDB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # prisma generate (postinstall) n'a pas besoin de DATABASE_URL.
+      - name: Install
+        run: |
+          npm ci
+          npm ci --prefix otel-web
+
+      - name: Tests et couverture
+        run: npm run coverage
+
+      - name: Résumé dans la PR
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os
+
+          def lines(path):
+              found = hit = 0
+              for line in open(path):
+                  if line.startswith("LF:"):
+                      found += int(line[3:])
+                  elif line.startswith("LH:"):
+                      hit += int(line[3:])
+              return found, hit
+
+          print("## Couverture (lignes)")
+          print()
+          print("| Périmètre | Couvertes | Total | % |")
+          print("|---|---|---|---|")
+          for label, name in [("Total", "lcov.info"), ("Backend (src/)", "backend.lcov.info"), ("Frontend (public/)", "frontend.lcov.info")]:
+              path = os.path.join("coverage", name)
+              if not os.path.exists(path):
+                  print(f"| {label} | – | – | absent |")
+                  continue
+              found, hit = lines(path)
+              pct = f"{100 * hit / found:.1f} %" if found else "–"
+              print(f"| {label} | {hit} | {found} | {pct} |")
+          PY
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 30

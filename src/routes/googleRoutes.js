@@ -9,7 +9,9 @@ const User = require("../models/User");
 const { createSession, currentUser, setSessionCookie, requireUser } = require("../auth/session");
 
 const STATE_COOKIE = "google_state";
+const NEXT_COOKIE = "google_next";
 const STATE_ATTRS = "Path=/api/google; HttpOnly; Secure; SameSite=Lax";
+const ALLOWED_NEXT = new Set(["/agenda.html", "/admin.html"]);
 
 const store = createTokenStore();
 const calendar = createCalendar(store);
@@ -19,29 +21,37 @@ function configuredAdmin() {
   return String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 }
 
+function nextPath(req) {
+  const value = String(req.query.next || "");
+  return ALLOWED_NEXT.has(value) ? value : "/agenda.html";
+}
+
 router.use((_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
 
-// L'identifiant utilisateur est celui du cookie ab_visitor : l'app n'a pas de comptes.
 router.get("/auth", (req, res) => {
   const { visitorId } = ab.resolveVisitor(req);
   const state = crypto.randomBytes(16).toString("base64url");
-  const cookies = [
+  const next = nextPath(req);
+  res.set("Set-Cookie", [
     `${STATE_COOKIE}=${state}; Max-Age=600; ${STATE_ATTRS}`,
+    `${NEXT_COOKIE}=${encodeURIComponent(next)}; Max-Age=600; ${STATE_ATTRS}`,
     ab.cookieHeader(visitorId),
-  ];
-  res.set("Set-Cookie", cookies);
+  ]);
   res.redirect(authUrl(state));
 });
 
 router.get("/callback", async (req, res) => {
   const { code, state, error } = req.query;
   const expected = ab.readCookie(req, STATE_COOKIE);
+  const nextRaw = ab.readCookie(req, NEXT_COOKIE);
+  const next = ALLOWED_NEXT.has(nextRaw || "") ? nextRaw : "/agenda.html";
   res.append("Set-Cookie", `${STATE_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
+  res.append("Set-Cookie", `${NEXT_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
 
-  if (error) return res.redirect("/agenda.html?google=refused");
+  if (error) return res.redirect(`${next}?google=refused`);
   if (!expected || state !== expected || typeof code !== "string") {
     return res.status(400).json({ error: "invalid_state" });
   }
@@ -62,7 +72,7 @@ router.get("/callback", async (req, res) => {
   ).lean();
   await store.save(String(user._id), tokens);
   setSessionCookie(res, await createSession(user._id));
-  res.redirect("/agenda.html?google=connected");
+  res.redirect(`${next}?google=connected`);
 });
 
 router.get("/me", requireUser(), (req, res) => res.json(req.user));

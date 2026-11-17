@@ -1,4 +1,39 @@
+// aislop-ignore-file code-quality/duplicate-block -- OpenAPI responses are intentionally repetitive
 const swaggerUi = require("swagger-ui-express");
+
+function jsonSchema(ref) {
+  return { "application/json": { schema: { $ref: ref } } };
+}
+
+function jsonRes(status, description, ref) {
+  return { [status]: { description, content: jsonSchema(ref) } };
+}
+
+function idParam(example) {
+  return {
+    name: "id",
+    in: "path",
+    required: true,
+    schema: example ? { type: "string", example } : { type: "string" },
+  };
+}
+
+function weatherIdResponses(okStatus, okDesc, okRef, badRequest = "ID invalide") {
+  return {
+    ...jsonRes(okStatus, okDesc, okRef),
+    ...jsonRes(400, badRequest, ERROR),
+    ...jsonRes(404, "Introuvable", ERROR),
+  };
+}
+
+function descOnly(status, description) {
+  return { [status]: { description } };
+}
+
+const ERROR = "#/components/schemas/Error";
+const WEATHER = "#/components/schemas/WeatherReport";
+const DELETED = "#/components/schemas/DeleteResponse";
+const LIST = "#/components/schemas/WeatherListResponse";
 
 const spec = {
   openapi: "3.0.3",
@@ -80,8 +115,6 @@ const spec = {
           {
             name: "sort",
             in: "query",
-            description:
-              "Tri : `ts`, `temp`, `pressure`, `wind` (préfixe `-` = décroissant). Les valeurs non mesurées sont exclues.",
             schema: {
               type: "string",
               enum: ["ts", "-ts", "temp", "-temp", "pressure", "-pressure", "wind", "-wind"],
@@ -89,22 +122,8 @@ const spec = {
           },
         ],
         responses: {
-          200: {
-            description: "Liste paginée",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/WeatherListResponse" },
-              },
-            },
-          },
-          500: {
-            description: "Erreur serveur",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
+          ...jsonRes(200, "Liste paginée", LIST),
+          ...jsonRes(500, "Erreur serveur", ERROR),
         },
       },
       post: {
@@ -114,7 +133,7 @@ const spec = {
           required: true,
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/WeatherReport" },
+              schema: { $ref: WEATHER },
               example: {
                 st: "x+47600-047900",
                 ts: "1984-03-05T13:00:00.000Z",
@@ -126,30 +145,13 @@ const spec = {
           },
         },
         responses: {
-          201: {
-            description: "Document créé",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/WeatherReport" },
-              },
-            },
-          },
-          400: {
-            description: "Corps invalide",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-          409: {
-            description: "Un relevé existe déjà pour cette station et cette heure. Aucune conversion n'est comptée.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
+          ...jsonRes(201, "Document créé", WEATHER),
+          ...jsonRes(400, "Corps invalide", ERROR),
+          ...jsonRes(
+            409,
+            "Un relevé existe déjà pour cette station et cette heure. Aucune conversion n'est comptée.",
+            ERROR
+          ),
         },
         parameters: [
           {
@@ -167,12 +169,7 @@ const spec = {
         tags: ["weather"],
         summary: "Fiche PDF d'un relevé",
         parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
+          idParam(),
           {
             name: "download",
             in: "query",
@@ -189,10 +186,10 @@ const spec = {
             },
             content: { "application/pdf": { schema: { type: "string", format: "binary" } } },
           },
-          401: { description: "Pas de cookie ciel_lecteur", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          404: { description: "Introuvable, ou relevé d'un autre lecteur", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          409: { description: "Relevé annulé", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          500: { description: "Moteur PDF en échec", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          ...jsonRes(401, "Pas de cookie ciel_lecteur", ERROR),
+          ...jsonRes(404, "Introuvable, ou relevé d'un autre lecteur", ERROR),
+          ...jsonRes(409, "Relevé annulé", ERROR),
+          ...jsonRes(500, "Moteur PDF en échec", ERROR),
         },
       },
     },
@@ -200,155 +197,51 @@ const spec = {
       get: {
         tags: ["weather"],
         summary: "Obtenir un rapport par ID",
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string", example: "5553a998e4b02cf7151190b8" },
-          },
-        ],
-        responses: {
-          200: {
-            description: "Document trouvé",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/WeatherReport" },
-              },
-            },
-          },
-          400: {
-            description: "ID invalide",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-          404: {
-            description: "Introuvable",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-        },
+        parameters: [idParam("5553a998e4b02cf7151190b8")],
+        responses: weatherIdResponses(200, "Document trouvé", WEATHER),
       },
       put: {
         tags: ["weather"],
         summary: "Mettre à jour un rapport",
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-        ],
+        parameters: [idParam()],
         requestBody: {
           required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/WeatherReport" },
-            },
-          },
+          content: jsonSchema(WEATHER),
         },
-        responses: {
-          200: {
-            description: "Document mis à jour",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/WeatherReport" },
-              },
-            },
-          },
-          400: {
-            description: "ID ou corps invalide",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-          404: {
-            description: "Introuvable",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-        },
+        responses: weatherIdResponses(200, "Document mis à jour", WEATHER, "ID ou corps invalide"),
       },
       delete: {
         tags: ["weather"],
         summary: "Supprimer un rapport",
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-        ],
-        responses: {
-          200: {
-            description: "Supprimé",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/DeleteResponse" },
-              },
-            },
-          },
-          400: {
-            description: "ID invalide",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-          404: {
-            description: "Introuvable",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Error" },
-              },
-            },
-          },
-        },
+        parameters: [idParam()],
+        responses: weatherIdResponses(200, "Supprimé", DELETED),
       },
     },
     "/api/ab/assignment": {
       get: {
         tags: ["ab"],
         summary: "Affecter une variante stable (cookie ab_visitor)",
-        responses: {
-          200: {
-            description: "Variante A ou B. Cache-Control: no-store. Expérience arrêtée : A, sans nouvelle affectation.",
-          },
-        },
+        responses: descOnly(
+          200,
+          "Variante A ou B. Cache-Control: no-store. Expérience arrêtée : A, sans nouvelle affectation."
+        ),
       },
     },
     "/api/ab/exposure": {
       post: {
         tags: ["ab"],
         summary: "Déclarer la première exposition du visiteur",
-        responses: {
-          204: { description: "Enregistrée, ou déjà enregistrée sans changer la date" },
-        },
+        responses: descOnly(204, "Enregistrée, ou déjà enregistrée sans changer la date"),
       },
     },
     "/api/ab/metrics": {
       get: {
         tags: ["ab"],
         summary: "Effectifs et taux par variante",
-        responses: {
-          200: {
-            description: "assigned, exposed, converted, bookings. rate vaut null si exposed est 0.",
-          },
-        },
+        responses: descOnly(
+          200,
+          "assigned, exposed, converted, bookings. rate vaut null si exposed est 0."
+        ),
       },
     },
   },
@@ -376,7 +269,7 @@ const spec = {
           pages: { type: "integer" },
           data: {
             type: "array",
-            items: { $ref: "#/components/schemas/WeatherReport" },
+            items: { $ref: WEATHER },
           },
         },
       },

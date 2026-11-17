@@ -6,7 +6,6 @@ async function connectDB() {
     throw new Error("MONGODB_URI manquant dans .env");
   }
   await mongoose.connect(uri);
-  console.log("MongoDB connecté (sample_weatherdata)");
 }
 
 module.exports = { connectDB };

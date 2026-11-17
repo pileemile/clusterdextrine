@@ -11,10 +11,17 @@ const { attachReader } = require("./pdf/releve");
 const weatherRoutes = require("./routes/weatherRoutes");
 const abRoutes = require("./routes/abRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
-const { tenantMiddleware } = require("./tenant/middleware");
+const { tenantMiddleware, requireMemberToWrite } = require("./tenant/middleware");
 const googleRoutes = require("./routes/googleRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
+const {
+  apiLimiter,
+  writeLimiter,
+  loginLimiter,
+  twoFactorLimiter,
+  telemetryLimiter,
+} = require("./security/rateLimits");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,7 +30,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: false }));
 
 // Même origine que la page : /otlp/ part au collecteur, le préfixe est retiré.
-app.use("/otlp", express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
+app.use("/otlp", telemetryLimiter, express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
   const target = new URL(req.url, endpoint.endsWith("/") ? endpoint : `${endpoint}/`);
   const headers = { ...req.headers, host: target.host };
@@ -49,6 +56,10 @@ app.use((req, res, next) => {
   if (traceId && !/^0+$/.test(traceId)) res.setHeader("X-Trace-Id", traceId);
   next();
 });
+
+app.use("/api", apiLimiter, writeLimiter);
+app.use(["/api/google/auth", "/api/google/callback"], loginLimiter);
+app.use("/api/auth/2fa/verify", twoFactorLimiter);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
@@ -94,7 +105,7 @@ app.use("/api/google", googleRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/ab", tenantMiddleware, abRoutes);
-app.use("/api/weather", tenantMiddleware, weatherRoutes);
+app.use("/api/weather", tenantMiddleware, requireMemberToWrite, weatherRoutes);
 
 if (require.main === module) {
   connectDB()

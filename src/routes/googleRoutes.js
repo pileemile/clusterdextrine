@@ -17,10 +17,6 @@ const store = createTokenStore();
 const calendar = createCalendar(store);
 const router = express.Router();
 
-function configuredAdmin() {
-  return String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-}
-
 function nextPath(req) {
   const value = String(req.query.next || "");
   return ALLOWED_NEXT.has(value) ? value : "/agenda.html";
@@ -62,12 +58,7 @@ router.get("/callback", async (req, res) => {
   }
   const user = await User.findOneAndUpdate(
     { email: profile.email.toLowerCase() },
-    {
-      $set: {
-        name: profile.name || profile.email,
-        ...(configuredAdmin() === profile.email.toLowerCase() ? { role: "admin" } : {}),
-      },
-    },
+    { $set: { name: profile.name || profile.email } },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   ).lean();
   await store.save(String(user._id), tokens);

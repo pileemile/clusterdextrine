@@ -98,7 +98,9 @@ app.use("/api/weather", tenantMiddleware, weatherRoutes);
 
 if (require.main === module) {
   connectDB()
-    .then(() => {
+    .then(async () => {
+      const User = require("./models/User");
+      await User.syncIndexes();
       app.listen(PORT, () => {
         console.log(`Front : http://localhost:${PORT}`);
         console.log(`Swagger UI : http://localhost:${PORT}/api-docs`);

@@ -27,6 +27,7 @@ router.post("/2fa/enroll", async (req, res) => {
   const label = encodeURIComponent(`Ciel:${user.email}`);
   const issuer = encodeURIComponent("Ciel");
   const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+  log({ action: "2fa_enroll", who: whoFrom(req), detail: "QR TOTP généré" });
   res.json({
     secret,
     otpauthUrl,

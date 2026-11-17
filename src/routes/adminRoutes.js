@@ -56,13 +56,14 @@ router.patch("/users/:id", async (req, res) => {
     .select("_id email name role")
     .lean();
   if (!user) return res.status(404).json({ error: "user_not_found" });
-  if (updates.role) {
-    log({
-      action: "role",
-      who: whoFrom(req),
-      detail: `${user.email} → ${user.role}`,
-    });
-  }
+  const parts = [];
+  if (updates.name) parts.push(`nom=${user.name}`);
+  if (updates.role) parts.push(`rôle=${user.role}`);
+  log({
+    action: updates.role ? "role" : "user_modifie",
+    who: whoFrom(req),
+    detail: `${user.email} · ${parts.join(", ")}`,
+  });
   res.json(user);
 });
 
@@ -132,8 +133,14 @@ router.patch("/tenants/:id", async (req, res) => {
   for (const key of ["name", "address", "color"]) {
     if (typeof req.body?.[key] === "string") updates[key] = req.body[key].trim();
   }
+  if (!Object.keys(updates).length) return res.status(400).json({ error: "no_valid_changes" });
   const tenant = await Tenant.findByIdAndUpdate(req.params.id, { $set: updates }, { returnDocument: "after" }).lean();
   if (!tenant) return res.status(404).json({ error: "tenant_not_found" });
+  log({
+    action: "tenant_modifie",
+    who: whoFrom(req),
+    detail: `${tenant.slug} · ${Object.keys(updates).join(", ")}`,
+  });
   res.json(tenant);
 });
 

@@ -29,6 +29,17 @@ function nextPath(req) {
   return isAllowedNext(value) ? value : "/agenda.html";
 }
 
+async function whoEmail(req) {
+  const user = req.user || (await currentUser(req));
+  return user?.email || "—";
+}
+
+function eventLabel(event) {
+  const title = event?.summary || "(sans titre)";
+  const start = event?.start?.dateTime || event?.start?.date || event?.start || "?";
+  return `${title} · ${start}`;
+}
+
 router.use((_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
@@ -91,7 +102,9 @@ router.get("/status", async (req, res) => {
 });
 
 router.delete("/disconnect", async (req, res) => {
+  const who = await whoEmail(req);
   await store.disconnect(await identity(req));
+  log({ action: "google_deconnecte", who, detail: "Agenda Google déconnecté" });
   res.status(204).end();
 });
 
@@ -106,24 +119,47 @@ router.post("/events", async (req, res) => {
     return res.status(400).json({ error: "summary, start et end sont requis" });
   }
   const event = { summary, description, location, start, end };
-  res.status(201).json(await calendar.createEvent(await identity(req), event));
+  const created = await calendar.createEvent(await identity(req), event);
+  log({
+    action: "agenda_cree",
+    who: await whoEmail(req),
+    detail: eventLabel(created),
+  });
+  res.status(201).json(created);
 });
 
 router.patch("/events/:id", async (req, res) => {
   const { summary, description, start, end } = req.body ?? {};
   const event = { summary, description, start, end };
-  res.json(await calendar.updateEvent(await identity(req), req.params.id, event));
+  const updated = await calendar.updateEvent(await identity(req), req.params.id, event);
+  log({
+    action: "agenda_modifie",
+    who: await whoEmail(req),
+    detail: eventLabel(updated) || `id ${req.params.id}`,
+  });
+  res.json(updated);
 });
 
 router.delete("/events/:id", async (req, res) => {
   await calendar.deleteEvent(await identity(req), req.params.id);
+  log({
+    action: "agenda_supprime",
+    who: await whoEmail(req),
+    detail: `Événement ${req.params.id}`,
+  });
   res.status(204).end();
 });
 
-router.use((err, _req, res, _next) => {
+router.use((err, req, res, _next) => {
   if (!(err instanceof GoogleError)) {
     return internalError(res, err, "Google");
   }
+  log({
+    level: "warn",
+    action: "agenda_erreur",
+    who: req.user?.email || "—",
+    detail: `${err.code || "google_error"} (${err.status})`,
+  });
   if (err.retryAfter) res.set("Retry-After", err.retryAfter);
   res.status(err.status).json({ error: err.code });
 });

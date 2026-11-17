@@ -11,7 +11,12 @@ const { createSession, currentUser, setSessionCookie, requireUser } = require(".
 const STATE_COOKIE = "google_state";
 const NEXT_COOKIE = "google_next";
 const STATE_ATTRS = "Path=/api/google; HttpOnly; Secure; SameSite=Lax";
-const ALLOWED_NEXT = new Set(["/agenda.html", "/admin.html"]);
+const ALLOWED_NEXT = new Set(["/", "/agenda.html", "/admin.html"]);
+const TENANT_PAGE = /^\/c\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/;
+
+function isAllowedNext(value) {
+  return ALLOWED_NEXT.has(value) || TENANT_PAGE.test(value);
+}
 
 const store = createTokenStore();
 const calendar = createCalendar(store);
@@ -19,7 +24,7 @@ const router = express.Router();
 
 function nextPath(req) {
   const value = String(req.query.next || "");
-  return ALLOWED_NEXT.has(value) ? value : "/agenda.html";
+  return isAllowedNext(value) ? value : "/agenda.html";
 }
 
 router.use((_req, res, next) => {
@@ -43,7 +48,7 @@ router.get("/callback", async (req, res) => {
   const { code, state, error } = req.query;
   const expected = ab.readCookie(req, STATE_COOKIE);
   const nextRaw = ab.readCookie(req, NEXT_COOKIE);
-  const next = ALLOWED_NEXT.has(nextRaw || "") ? nextRaw : "/agenda.html";
+  const next = isAllowedNext(nextRaw || "") ? nextRaw : "/agenda.html";
   res.append("Set-Cookie", `${STATE_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
   res.append("Set-Cookie", `${NEXT_COOKIE}=; Max-Age=0; ${STATE_ATTRS}`);
 

@@ -68,6 +68,12 @@ function requireAdmin() {
   };
 }
 
+async function destroySession(req, res) {
+  const token = readCookie(req, COOKIE);
+  if (token) await AuthSession.deleteOne({ tokenHash: hashToken(token) });
+  res.setHeader("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+}
+
 async function markTwoFactorVerified(req) {
   const token = readCookie(req, COOKIE);
   if (!token) return false;
@@ -78,4 +84,4 @@ async function markTwoFactorVerified(req) {
   return result.modifiedCount === 1;
 }
 
-module.exports = { createSession, currentUser, currentSession, markTwoFactorVerified, requireUser, requireAdmin, setSessionCookie };
+module.exports = { createSession, currentUser, currentSession, destroySession, markTwoFactorVerified, requireUser, requireAdmin, setSessionCookie };

@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@fullcalendar/core": "6.1.22",
+    "@fullcalendar/core": "7.1.5",
     "@fullcalendar/daygrid": "6.1.22",
     "@fullcalendar/interaction": "6.1.22",
     "@fullcalendar/timegrid": "6.1.22",
-    "@fullcalendar/vue3": "6.1.22",
+    "@fullcalendar/vue3": "7.1.5",
     "vue": "3.5.45"
   },
   "devDependencies": {

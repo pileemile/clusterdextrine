@@ -301,6 +301,7 @@ async function flushOutbox() {
 
 const cache = new Map();
 const pending = new Set();
+let me = null;
 const state = {
   page: 1,
   limit: 39,
@@ -444,7 +445,7 @@ function renderFeatured(doc) {
         </ul>
         <div class="une__actions">
           <button class="btn btn--primary" type="button" data-open="${esc(s.id)}">${icon.eye}<span>Voir le relevé</span></button>
-          <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          ${me ? `<button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>` : ""}
           ${placeButton(s)}
           <button class="btn" type="button" data-shuffle>${icon.refresh}<span>Autre relevé</span></button>
         </div>
@@ -524,9 +525,11 @@ function renderGrid() {
         })
       : emptyBlock({
           title: "Aucun relevé",
-          text: "La collection est vide.",
+          text: me ? "La collection est vide." : "La collection est vide. Connectez-vous pour en ajouter.",
           ico: icon.cloud,
-          action: `<button class="btn btn--primary" type="button" data-new>${icon.plus}<span data-ab-label>${esc(abLabelText())}</span></button>`,
+          action: me
+            ? `<button class="btn btn--primary" type="button" data-new>${icon.plus}<span data-ab-label>${esc(abLabelText())}</span></button>`
+            : "",
         });
     applyAbLabel();
     return;
@@ -932,9 +935,9 @@ function renderDetail(doc) {
           <li>${icon.pin}<span>${esc(fmtCoords(s.lat, s.lng))}</span></li>
         </ul>
         <div class="detail__actions">
-          <button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>
+          ${me ? `<button class="btn" type="button" data-edit="${esc(s.id)}">${icon.pencil}<span>Modifier</span></button>` : ""}
           ${placeButton(s)}
-          <button class="btn" type="button" data-delete="${esc(s.id)}">${icon.trash}<span>Supprimer</span></button>
+          ${me ? `<button class="btn" type="button" data-delete="${esc(s.id)}">${icon.trash}<span>Supprimer</span></button>` : ""}
           ${
             cancelled
               ? ""
@@ -1398,6 +1401,10 @@ document.addEventListener("click", async (e) => {
     if (doc) openModal(renderDetail(doc));
     else closeModal();
   } else if (t.matches("[data-new]")) {
+    if (!me) {
+      openModal(renderLogin());
+      return;
+    }
     openModal(renderForm());
   } else if (t.matches("[data-shuffle]")) {
     shuffleFeatured();
@@ -1418,6 +1425,10 @@ document.addEventListener("click", async (e) => {
       toast({ msg: "Copie impossible dans ce navigateur.", type: "error" });
     }
   } else if (t.matches("[data-delete]")) {
+    if (!me) {
+      openModal(renderLogin());
+      return;
+    }
     scheduleDelete(t.dataset.delete);
   } else if (t.matches("[data-save-place]")) {
     try {
@@ -1437,6 +1448,10 @@ document.addEventListener("click", async (e) => {
     }
   } else {
     const id = t.dataset.open || t.dataset.edit || t.dataset.id;
+    if (t.matches("[data-edit]") && !me) {
+      openModal(renderLogin());
+      return;
+    }
     try {
       const doc = await ensureDoc(id);
       openModal(t.matches("[data-edit]") ? renderForm(doc) : renderDetail(doc));
@@ -1466,7 +1481,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/") {
     e.preventDefault();
     $("#searchInput").focus();
-  } else if (e.key === "n" || e.key === "N") {
+  } else if ((e.key === "n" || e.key === "N") && me) {
     e.preventDefault();
     openModal(renderForm());
   }
@@ -1825,7 +1840,19 @@ initializeTenants();
 
 /* Connexion */
 
-let me = null;
+function syncWriteUi() {
+  const createBtn = document.querySelector("header [data-new]");
+  if (createBtn) createBtn.hidden = !me;
+  if (state.featuredId) {
+    const doc = cache.get(state.featuredId);
+    if (doc) renderFeatured(doc);
+  }
+  if (!$("#modal")?.hidden && modal.mode === "detail" && modal.docId) {
+    const doc = cache.get(modal.docId);
+    if (doc) openModal(renderDetail(doc));
+  }
+  if (!state.docs.length && state.searchUi !== "loading") renderGrid();
+}
 
 async function loadMe() {
   try {
@@ -1835,9 +1862,11 @@ async function loadMe() {
     me = null;
   }
   const btn = $("#loginBtn");
-  if (!btn) return;
-  btn.textContent = me ? me.name || me.email : "Connexion";
-  btn.setAttribute("aria-label", me ? `Compte : ${me.name || me.email}` : "Se connecter");
+  if (btn) {
+    btn.textContent = me ? me.name || me.email : "Connexion";
+    btn.setAttribute("aria-label", me ? `Compte : ${me.name || me.email}` : "Se connecter");
+  }
+  syncWriteUi();
 }
 
 function loginNextPath() {
